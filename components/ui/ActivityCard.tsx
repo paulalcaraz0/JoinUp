@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, Image } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
+import { format } from 'date-fns';
 import { Colors, Typography, BorderRadius, Spacing, Shadows, CategoryColors } from '../../constants/theme';
 import { SlotProgressBar } from './SlotProgressBar';
 import type { Activity } from '../../types';
-import { format } from 'date-fns';
-import { Ionicons } from '@expo/vector-icons';
 
 interface ActivityCardProps {
   activity: Activity;
@@ -20,9 +20,7 @@ export function ActivityCard({ activity, onPress, onJoin, style, index = 0, isLe
   const slotsLeft = activity.currentSlots;
   const isFull = slotsLeft <= 0;
   const chipColor = CategoryColors[activity.category] ?? Colors.accent;
-  const dateStr = activity.dateTime
-    ? format(new Date(activity.dateTime), 'EEE, h:mm a')
-    : '';
+  const dateStr = activity.dateTime ? format(new Date(activity.dateTime), 'EEE, h:mm a') : '';
   const joined = activity.maxSlots - activity.currentSlots;
 
   return (
@@ -33,59 +31,58 @@ export function ActivityCard({ activity, onPress, onJoin, style, index = 0, isLe
         activeOpacity={0.92}
         disabled={isLeaving}
       >
-        {activity.coverImage ? (
-          <Image
-            source={{ uri: activity.coverImage }}
-            style={styles.coverPhoto}
-            resizeMode="cover"
-          />
-        ) : null}
+        <View style={styles.mediaFrame}>
+          {activity.coverImage ? (
+            <Image source={{ uri: activity.coverImage }} style={styles.coverPhoto} resizeMode="cover" />
+          ) : (
+            <View style={styles.coverPlaceholder}>
+              <Ionicons name="calendar-outline" size={32} color={Colors.slate} />
+            </View>
+          )}
+          <View style={styles.mediaOverlay} />
+          <View style={styles.dateBadge}>
+            <Text style={styles.dateBadgeText}>{dateStr || 'Soon'}</Text>
+          </View>
+        </View>
 
-        {/* Category chip + slots badge */}
         <View style={styles.topRow}>
-          <View style={[styles.categoryChip, { backgroundColor: chipColor + '18', borderColor: chipColor }]}>
+          <View style={[styles.categoryChip, { backgroundColor: chipColor + '16', borderColor: chipColor }]}>
             <Text style={[styles.categoryText, { color: chipColor }]}>{activity.category}</Text>
           </View>
-          <View style={[styles.slotBadge, { backgroundColor: isFull ? Colors.danger + '15' : Colors.accent + '15' }]}>
-            <Text style={[styles.slotBadgeText, { color: isFull ? Colors.danger : Colors.accent }]}>
-              {isFull ? 'FULL' : `${slotsLeft} left`}
+          <View style={[styles.slotBadge, { backgroundColor: isFull ? Colors.danger + '12' : Colors.success + '12' }]}>
+            <Text style={[styles.slotBadgeText, { color: isFull ? Colors.danger : Colors.success }]}>
+              {isFull ? 'Full' : `${slotsLeft} left`}
             </Text>
           </View>
         </View>
 
-        {/* Title */}
         <Text style={styles.title} numberOfLines={2}>
           {activity.title}
         </Text>
 
-        {/* Location and time */}
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={14} color={Colors.slate} />
           <Text style={styles.infoText} numberOfLines={2}>
-            {activity.location.name}
-          </Text>
-          <Text style={styles.dot}>•</Text>
-          <Text style={styles.infoText} numberOfLines={1}>
-            {dateStr}
+            {activity.location.name || 'Location TBD'}
           </Text>
         </View>
 
-        {/* Progress bar */}
         <SlotProgressBar current={joined} max={activity.maxSlots} />
+        <Text style={styles.progressText}>{joined}/{activity.maxSlots} joined</Text>
 
-        {/* Join button */}
         <TouchableOpacity
           style={[styles.joinBtn, isFull && styles.joinBtnDisabled]}
-          onPress={(e) => {
-            e.stopPropagation?.();
+          onPress={(event) => {
+            event.stopPropagation?.();
             onJoin();
           }}
           disabled={isFull || isLeaving}
-          activeOpacity={0.8}
+          activeOpacity={0.82}
         >
           <Text style={styles.joinBtnText}>
-            {isLeaving ? 'Joining…' : isFull ? 'Full' : 'Join →'}
+            {isLeaving ? 'Joining...' : isFull ? 'Full' : 'Join'}
           </Text>
+          {!isFull && !isLeaving ? <Ionicons name="arrow-forward" size={15} color={Colors.white} /> : null}
         </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>
@@ -96,25 +93,58 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.card,
-    padding: Spacing.md,
+    padding: Spacing.sm,
     marginBottom: Spacing.md,
     marginHorizontal: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    overflow: 'hidden',
   },
   cardLeaving: {
     transform: [{ translateX: 12 }],
   },
-  coverPhoto: {
+  mediaFrame: {
     width: '100%',
-    height: 130,
+    height: 152,
     borderRadius: BorderRadius.input,
     marginBottom: Spacing.sm,
-    backgroundColor: Colors.primary + '10',
+    backgroundColor: Colors.mutedSurface,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  coverPhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  coverPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(21,34,56,0.08)',
+  },
+  dateBadge: {
+    position: 'absolute',
+    left: Spacing.sm,
+    bottom: Spacing.sm,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  dateBadgeText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 11,
+    color: Colors.primary,
   },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
   },
   categoryChip: {
     paddingHorizontal: 12,
@@ -137,17 +167,18 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: Typography.bodyBold,
-    fontSize: 18,
+    fontSize: 19,
     color: Colors.text,
     marginBottom: Spacing.xs,
     lineHeight: 24,
+    paddingHorizontal: Spacing.xs,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     marginBottom: Spacing.sm,
     gap: 4,
+    paddingHorizontal: Spacing.xs,
   },
   infoText: {
     fontFamily: Typography.body,
@@ -156,18 +187,25 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
-  dot: {
+  progressText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 11,
     color: Colors.slate,
-    marginHorizontal: 2,
-    flexShrink: 0,
+    marginTop: 6,
+    paddingHorizontal: Spacing.xs,
   },
   joinBtn: {
     backgroundColor: Colors.accent,
     borderRadius: BorderRadius.button,
     paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     alignSelf: 'flex-end',
     marginTop: Spacing.sm,
+    marginRight: Spacing.xs,
+    marginBottom: Spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   joinBtnDisabled: {
     backgroundColor: Colors.slate,

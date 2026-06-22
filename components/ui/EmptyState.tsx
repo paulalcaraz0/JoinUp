@@ -12,7 +12,9 @@ interface EmptyStateProps {
 export function EmptyState({ icon = 'search-outline', title, message }: EmptyStateProps) {
   return (
     <View style={styles.container}>
-      <Ionicons name={icon} size={64} color={Colors.slate} style={styles.icon} />
+      <View style={styles.iconWrap}>
+        <Ionicons name={icon} size={34} color={Colors.accent} />
+      </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.message}>{message}</Text>
     </View>
@@ -27,9 +29,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.xl * 2,
   },
-  icon: {
+  iconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.accent + '12',
     marginBottom: Spacing.md,
-    opacity: 0.5,
   },
   title: {
     fontFamily: Typography.bodyBold,

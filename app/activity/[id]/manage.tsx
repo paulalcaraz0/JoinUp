@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -20,9 +20,19 @@ import { decode } from 'base64-arraybuffer';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../../constants/theme';
 import { NavBar } from '../../../components/layout/NavBar';
 import { SlotProgressBar } from '../../../components/ui/SlotProgressBar';
+import { PrimaryButton } from '../../../components/ui/PrimaryButton';
+import { SecondaryButton } from '../../../components/ui/SecondaryButton';
 import { useActivities } from '../../../hooks/useActivities';
 import { useAuthStore } from '../../../store/authStore';
 import { supabase } from '../../../lib/supabase';
+
+type PendingJoinRequest = {
+  id: string;
+  userId: string;
+  displayName: string;
+  photoUrl: string;
+  joinedAt: string;
+};
 
 type PickedImage = {
   uri: string;
@@ -63,14 +73,93 @@ export default function ManageActivityScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
-  const { activities, leaveActivity, refetch } = useActivities();
+  const {
+    activities,
+    error: activityError,
+    leaveActivity,
+    approveJoinRequest,
+    rejectJoinRequest,
+    refetch,
+  } = useActivities();
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<PendingJoinRequest[]>([]);
+  const [isLoadingRequests, setIsLoadingRequests] = useState(false);
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
 
   const activity = useMemo(
     () => activities.find((a) => a.id === id) ?? null,
     [activities, id]
   );
+
+  const fetchPendingRequests = useCallback(async () => {
+    if (!activity?.requiresApproval || !activity?.id) {
+      setPendingRequests([]);
+      setIsLoadingRequests(false);
+      return;
+    }
+
+    try {
+      setIsLoadingRequests(true);
+
+      const { data: participantRows, error: participantError } = await supabase
+        .from('participants')
+        .select('id, user_id, joined_at')
+        .eq('activity_id', activity.id)
+        .eq('status', 'pending')
+        .order('joined_at', { ascending: false });
+
+      if (participantError) throw participantError;
+
+      const requesterIds = (participantRows ?? []).map((row) => row.user_id);
+      let profileMap: Record<string, { display_name: string; photo_url: string }> = {};
+
+      if (requesterIds.length > 0) {
+        const { data: profileRows, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, display_name, photo_url')
+          .in('id', requesterIds);
+
+        if (profileError) throw profileError;
+
+        profileMap = (profileRows ?? []).reduce<Record<string, { display_name: string; photo_url: string }>>(
+          (acc, profile) => {
+            acc[profile.id] = {
+              display_name: profile.display_name ?? '',
+              photo_url: profile.photo_url ?? '',
+            };
+            return acc;
+          },
+          {}
+        );
+      }
+
+      setPendingRequests(
+        (participantRows ?? []).map((row) => ({
+          id: row.id,
+          userId: row.user_id,
+          displayName: profileMap[row.user_id]?.display_name || row.user_id,
+          photoUrl: profileMap[row.user_id]?.photo_url || '',
+          joinedAt: row.joined_at,
+        }))
+      );
+    } catch {
+      setPendingRequests([]);
+    } finally {
+      setIsLoadingRequests(false);
+    }
+  }, [activity?.id, activity?.requiresApproval]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!isActive) return;
+    void fetchPendingRequests();
+
+    return () => {
+      isActive = false;
+    };
+  }, [fetchPendingRequests]);
 
   const createUploadPayload = async (image: PickedImage): Promise<UploadPayload> => {
     if (typeof image.fileSize === 'number' && image.fileSize <= 0) {
@@ -278,6 +367,46 @@ export default function ManageActivityScreen() {
     );
   };
 
+  const handleApproveRequest = async (request: PendingJoinRequest) => {
+    if (!activity) return;
+
+    setProcessingRequestId(request.id);
+    try {
+      const approved = await approveJoinRequest(activity.id, request.userId);
+      if (!approved) {
+        Alert.alert('Approve failed', activityError ?? 'Could not approve this request.');
+        return;
+      }
+
+      setPendingRequests((prev) => prev.filter((item) => item.id !== request.id));
+      await refetch();
+      await fetchPendingRequests();
+      Alert.alert('Approved', `${request.displayName} can now join the chat.`);
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  const handleRejectRequest = async (request: PendingJoinRequest) => {
+    if (!activity) return;
+
+    setProcessingRequestId(request.id);
+    try {
+      const rejected = await rejectJoinRequest(activity.id, request.userId);
+      if (!rejected) {
+        Alert.alert('Reject failed', activityError ?? 'Could not reject this request.');
+        return;
+      }
+
+      setPendingRequests((prev) => prev.filter((item) => item.id !== request.id));
+      await refetch();
+      await fetchPendingRequests();
+      Alert.alert('Rejected', `${request.displayName} was notified.`);
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
   const handleCancelActivity = () => {
     Alert.alert(
       'Cancel Activity',
@@ -378,6 +507,53 @@ export default function ManageActivityScreen() {
             scrollEnabled={false}
           />
 
+          {activity.requiresApproval && (
+            <>
+              <Text style={styles.sectionTitle}>Pending Requests</Text>
+              {isLoadingRequests ? (
+                <View style={[styles.pendingCard, Shadows.card]}>
+                  <Text style={styles.emptyText}>Loading requests...</Text>
+                </View>
+              ) : pendingRequests.length === 0 ? (
+                <View style={[styles.pendingCard, Shadows.card]}>
+                  <Text style={styles.emptyText}>No pending join requests.</Text>
+                </View>
+              ) : (
+                pendingRequests.map((request) => (
+                  <View key={request.id} style={[styles.pendingCard, Shadows.card]}>
+                    <View style={styles.pendingHeader}>
+                      <View style={styles.participantAvatar}>
+                        {request.photoUrl ? (
+                          <Image source={{ uri: request.photoUrl }} style={styles.pendingAvatarImage} />
+                        ) : (
+                          <Ionicons name="person" size={18} color={Colors.white} />
+                        )}
+                      </View>
+                      <View style={styles.participantInfo}>
+                        <Text style={styles.participantName}>{request.displayName}</Text>
+                        <Text style={styles.pendingMeta}>Requested to join</Text>
+                      </View>
+                    </View>
+                    <View style={styles.pendingActions}>
+                      <SecondaryButton
+                        title="Reject"
+                        onPress={() => void handleRejectRequest(request)}
+                        loading={processingRequestId === request.id}
+                        style={styles.pendingActionBtn}
+                      />
+                      <PrimaryButton
+                        title="Approve"
+                        onPress={() => void handleApproveRequest(request)}
+                        loading={processingRequestId === request.id}
+                        style={styles.pendingActionBtn}
+                      />
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
+          )}
+
           {/* Cancel activity */}
           <TouchableOpacity
             style={styles.cancelBtn}
@@ -459,6 +635,35 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyMed,
     fontSize: 15,
     color: Colors.text,
+  },
+  pendingCard: {
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.card,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  pendingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  pendingAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+  },
+  pendingMeta: {
+    fontFamily: Typography.body,
+    fontSize: 13,
+    color: Colors.slate,
+    marginTop: 2,
+  },
+  pendingActions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  pendingActionBtn: {
+    flex: 1,
   },
   removeBtn: {
     width: 44,

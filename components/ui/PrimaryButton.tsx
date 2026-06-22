@@ -7,7 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { Colors, Typography, BorderRadius, Spacing } from '../../constants/theme';
+import { Colors, Typography, BorderRadius, Spacing, Shadows } from '../../constants/theme';
 
 interface PrimaryButtonProps {
   title: string;
@@ -62,6 +62,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 52,
     gap: Spacing.sm,
+    ...Shadows.fab,
   },
   disabled: {
     opacity: 0.5,
@@ -71,5 +72,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyBold,
     fontSize: 16,
     textAlign: 'center',
+    letterSpacing: 0,
   },
 });

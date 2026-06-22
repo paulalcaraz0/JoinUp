@@ -211,6 +211,17 @@ export default function SignUpScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(450).springify()}>
+          <Text style={styles.legalText}>
+            By creating an account, you agree to the{' '}
+            <Text style={styles.legalLink} onPress={() => router.push('/legal/terms')}>
+              Terms
+            </Text>{' '}
+            and{' '}
+            <Text style={styles.legalLink} onPress={() => router.push('/legal/privacy')}>
+              Privacy Policy
+            </Text>
+            .
+          </Text>
           <PrimaryButton
             title="Create Account"
             onPress={handleSubmit}
@@ -383,6 +394,18 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyBold,
     fontSize: 18,
     color: '#4285F4',
+  },
+  legalText: {
+    fontFamily: Typography.body,
+    fontSize: 12,
+    lineHeight: 18,
+    color: Colors.slate,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  legalLink: {
+    fontFamily: Typography.bodyBold,
+    color: Colors.accent,
   },
   signInLink: {
     alignItems: 'center',

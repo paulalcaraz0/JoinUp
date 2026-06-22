@@ -23,7 +23,7 @@ export function CategoryChip({
   const chipColor = CategoryColors[label] ?? Colors.accent;
 
   const animatedStyle = useAnimatedStyle(() => ({
-    backgroundColor: withTiming(selected ? chipColor : Colors.white, { duration: 200 }),
+    backgroundColor: withTiming(selected ? chipColor : Colors.surface, { duration: 200 }),
     borderColor: withTiming(selected ? chipColor : Colors.divider, { duration: 200 }),
     transform: [{ scale: withSpring(selected ? 1 : 1, { damping: 15 }) }],
   }));
@@ -55,8 +55,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 5,
     borderRadius: BorderRadius.pill,
-    borderWidth: 1.5,
-    marginRight: 4,
+    borderWidth: 1,
+    marginRight: 6,
     minHeight: 34,
     justifyContent: 'center',
     alignItems: 'center',
@@ -65,8 +65,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: BorderRadius.pill,
-    borderWidth: 1.25,
-    marginRight: 4,
+    borderWidth: 1,
+    marginRight: 6,
     minHeight: 30,
     justifyContent: 'center',
     alignItems: 'center',

@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import type { Message } from '../types';
 import { getMockChatMessages } from '../lib/mockChats';
 
+const chatSupabase = supabase as any;
+
 const MOCK_CHAT_STORAGE_PREFIX = 'mockChatMessages:v1:';
 
 function mockChatStorageKey(activityId: string) {
@@ -94,6 +96,24 @@ function mergeMockMessages(seeded: Message[], persisted: Message[]) {
 }
 
 function mapMessage(row: any): Message {
+  const resolveChatImageUrl = (imageUrl?: string): string | undefined => {
+    if (!imageUrl) return undefined;
+    if (!imageUrl.includes('/chat-images/')) return imageUrl;
+
+    try {
+      const parsed = new URL(imageUrl);
+      const marker = '/chat-images/';
+      const markerIndex = parsed.pathname.indexOf(marker);
+
+      if (markerIndex === -1) return imageUrl;
+
+      const objectPath = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
+      return (supabase as any).storage.from('chat-images').getPublicUrl(objectPath).data.publicUrl;
+    } catch {
+      return imageUrl;
+    }
+  };
+
   return {
     id: row.id,
     activityId: row.activity_id,
@@ -101,7 +121,7 @@ function mapMessage(row: any): Message {
     senderName: row.sender_name ?? '',
     senderPhoto: row.sender_photo ?? '',
     text: row.text ?? undefined,
-    imageUrl: row.image_url ?? undefined,
+    imageUrl: resolveChatImageUrl(row.image_url ?? undefined),
     location:
       row.location_lat != null && row.location_lng != null
         ? { lat: row.location_lat, lng: row.location_lng }
@@ -117,37 +137,38 @@ export function useChat(activityId: string) {
   const [isLoading, setIsLoading] = useState(true);
   const isMockThread = activityId.startsWith('mock-');
 
+  const fetchMessages = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      if (isMockThread) {
+        const seededMessages = getMockChatMessages(activityId);
+        const persistedMessages = await readPersistedMockMessages(activityId);
+        setMessages(mergeMockMessages(seededMessages, persistedMessages));
+        return;
+      }
+
+      const { data, error } = await chatSupabase
+        .from('messages_full')
+        .select('*')
+        .eq('activity_id', activityId)
+        .order('created_at', { ascending: true });
+
+      if (!error && data) {
+        setMessages(data.map(mapMessage));
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activityId, isMockThread]);
+
   useEffect(() => {
     let isActive = true;
 
-    const fetchMessages = async () => {
-      try {
-        if (isMockThread) {
-          const seededMessages = getMockChatMessages(activityId);
-          const persistedMessages = await readPersistedMockMessages(activityId);
-          if (isActive) {
-            setMessages(mergeMockMessages(seededMessages, persistedMessages));
-          }
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('messages_full')
-          .select('*')
-          .eq('activity_id', activityId)
-          .order('created_at', { ascending: true });
-
-        if (!error && data && isActive) {
-          setMessages(data.map(mapMessage));
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
+    const initFetch = async () => {
+      await fetchMessages();
     };
 
-    fetchMessages();
+    initFetch();
 
     if (isMockThread) {
       return () => {
@@ -155,7 +176,7 @@ export function useChat(activityId: string) {
       };
     }
 
-    const channel = supabase
+    const channel = chatSupabase
       .channel(`chat:${activityId}`)
       .on(
         'postgres_changes',
@@ -166,13 +187,13 @@ export function useChat(activityId: string) {
           filter: `activity_id=eq.${activityId}`,
         },
         async (payload: any) => {
-          const { data } = await supabase
+          const { data } = await chatSupabase
             .from('messages_full')
             .select('*')
             .eq('id', payload.new.id)
             .single();
 
-          if (data) {
+          if (data && isActive) {
             setMessages((prev) => {
               if (prev.some((message) => message.id === data.id)) return prev;
               return [...prev, mapMessage(data)];
@@ -180,11 +201,24 @@ export function useChat(activityId: string) {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `activity_id=eq.${activityId}`,
+        },
+        (payload: any) => {
+          if (!isActive) return;
+          setMessages((prev) => prev.filter((message) => message.id !== payload.old.id));
+        }
+      )
       .subscribe();
 
     return () => {
       isActive = false;
-      supabase.removeChannel(channel);
+      chatSupabase.removeChannel(channel);
     };
   }, [activityId, isMockThread]);
 
@@ -211,7 +245,7 @@ export function useChat(activityId: string) {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await chatSupabase
         .from('messages')
         .insert({
           activity_id: activityId,
@@ -258,7 +292,7 @@ export function useChat(activityId: string) {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await chatSupabase
         .from('messages')
         .insert({
           activity_id: activityId,
@@ -312,7 +346,7 @@ export function useChat(activityId: string) {
         return;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await chatSupabase
         .from('messages')
         .insert({
           activity_id: activityId,
@@ -337,7 +371,31 @@ export function useChat(activityId: string) {
     [activityId, isMockThread]
   );
 
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      if (isMockThread) {
+        setMessages((prev) => {
+          const next = prev.filter((message) => message.id !== messageId);
+          void persistMockMessages(activityId, next);
+          return next;
+        });
+        return true;
+      }
+
+      const { data, error } = await chatSupabase.rpc('delete_chat_message', {
+        p_message_id: messageId,
+      });
+
+      if (error) throw error;
+      if (!data) return false;
+
+      setMessages((prev) => prev.filter((message) => message.id !== messageId));
+      return true;
+    },
+    [activityId, isMockThread]
+  );
+
   const pinnedMessage = messages.find((message) => message.isPinned) ?? null;
 
-  return { messages, isLoading, sendMessage, sendImage, sendLocation, pinnedMessage };
+  return { messages, isLoading, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch: fetchMessages };
 }

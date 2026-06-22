@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,8 +13,8 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { SlideOutLeft } from 'react-native-reanimated';
-import { Colors, Typography, Spacing, BorderRadius, Categories } from '../../constants/theme';
+import Animated, { FadeInDown, FadeOutUp, LinearTransition, SlideOutLeft } from 'react-native-reanimated';
+import { Colors, Typography, Spacing, BorderRadius, Categories, Shadows } from '../../constants/theme';
 import { ActivityCard } from '../../components/ui/ActivityCard';
 import { CategoryChip } from '../../components/ui/CategoryChip';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -31,6 +31,8 @@ export default function HomeFeedScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [fadingActivityIds, setFadingActivityIds] = useState<string[]>([]);
+  const [showGreetingCard, setShowGreetingCard] = useState(true);
+  const lastScrollYRef = useRef(0);
 
   const filteredActivities = useMemo(() => {
     let filtered = activities;
@@ -59,7 +61,7 @@ export default function HomeFeedScreen() {
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
+    if (hour < 19) return 'Good afternoon';
     return 'Good evening';
   };
 
@@ -69,15 +71,30 @@ export default function HomeFeedScreen() {
     setRefreshing(false);
   };
 
+  const handleFeedScroll = (event: any) => {
+    const currentY = event.nativeEvent.contentOffset.y;
+    const previousY = lastScrollYRef.current;
+    const scrollingDown = currentY > previousY + 6;
+    const scrollingUp = currentY < previousY - 8;
+
+    if (currentY > 36 && scrollingDown) {
+      setShowGreetingCard(false);
+    }
+
+    if (currentY < 18 || scrollingUp) {
+      setShowGreetingCard(true);
+    }
+
+    lastScrollYRef.current = Math.max(0, currentY);
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.logo}>
-            <Text style={styles.logoJoin}>Join</Text>
-            <Text style={styles.logoUp}>Up</Text>
-          </Text>
+        <View>
+          <Text style={styles.logo}>JoinUp</Text>
+          <Text style={styles.headerCaption}>Curated activities near you</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -86,20 +103,32 @@ export default function HomeFeedScreen() {
           >
             <Ionicons name="notifications-outline" size={24} color={Colors.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.avatar}>
-            <Ionicons name="person" size={18} color={Colors.white} />
+          <TouchableOpacity style={styles.avatar} onPress={() => router.push('/(tabs)/profile')}>
+            <Text style={styles.avatarInitial}>
+              {(user?.displayName || 'U').trim().charAt(0).toUpperCase()}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Greeting */}
-      <View style={styles.greetingContainer}>
+      {/* Greeting card moved into the FlatList header so it scrolls with activities.
+      <Animated.View
+        style={[styles.greetingContainer, Shadows.card]}
+      >
+        <View style={styles.greetingTopRow}>
+          <View style={styles.greetingIcon}>
+            <Ionicons name="sparkles" size={18} color={Colors.accent} />
+          </View>
+          <Text style={styles.greetingKicker}>Today</Text>
+        </View>
         <Text style={styles.greeting}>
           {getGreeting()}, {user?.displayName?.split(' ')[0] ?? 'there'} 👋
         </Text>
-      </View>
-
-      {/* Category chips */}
+        <Text style={styles.greetingBody}>
+          Find a group that fits your mood, schedule, and city.
+        </Text>
+      </Animated.View>
+      */}
       <ScrollView
         horizontal
         style={styles.chipsScroll}
@@ -117,7 +146,30 @@ export default function HomeFeedScreen() {
         ))}
       </ScrollView>
 
-      {/* Search bar */}
+      {showGreetingCard ? (
+        <Animated.View
+          entering={FadeInDown.duration(220)}
+          exiting={FadeOutUp.duration(180)}
+          layout={LinearTransition.duration(180)}
+          style={[styles.greetingContainer, Shadows.card]}
+        >
+          <View style={styles.greetingTopRow}>
+            <View style={styles.greetingIcon}>
+              <Ionicons name="sparkles" size={18} color={Colors.accent} />
+            </View>
+            <View style={styles.greetingTextBlock}>
+              <Text style={styles.greetingKicker}>Today</Text>
+              <Text style={styles.greeting}>
+                {getGreeting()}, {user?.displayName?.split(' ')[0] ?? 'there'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.greetingBody}>
+            Find something nearby today
+          </Text>
+        </Animated.View>
+      ) : null}
+
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={18} color={Colors.slate} />
         <TextInput
@@ -176,6 +228,8 @@ export default function HomeFeedScreen() {
               { paddingBottom: insets.bottom + Spacing.xl * 2 },
             ]}
             showsVerticalScrollIndicator={false}
+            onScroll={handleFeedScroll}
+            scrollEventThrottle={16}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -199,22 +253,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   logo: {
-    fontSize: 24,
+    fontSize: 27,
     fontFamily: Typography.display,
-  },
-  logoJoin: {
     color: Colors.primary,
   },
-  logoUp: {
-    color: Colors.accent,
+  headerCaption: {
+    fontFamily: Typography.body,
+    fontSize: 12,
+    color: Colors.slate,
+    marginTop: 2,
   },
   headerRight: {
     flexDirection: 'row',
@@ -224,34 +276,94 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatar: {
+  avatarInitial: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 15,
+    color: Colors.white,
+  },
+  greetingContainer: {
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.sm,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    overflow: 'hidden',
+  },
+  greetingTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  greetingIcon: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: Colors.peach,
+    backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  greetingContainer: {
-    paddingHorizontal: Spacing.md,
-    paddingTop: 2,
-    paddingBottom: 0,
+  greetingTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  greetingKicker: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 11,
+    color: Colors.white,
+    opacity: 0.72,
   },
   greeting: {
     fontFamily: Typography.bodyBold,
-    fontSize: 20,
-    color: Colors.text,
+    fontSize: 16,
+    color: Colors.white,
+    marginTop: 1,
+  },
+  greetingBody: {
+    fontFamily: Typography.body,
+    fontSize: 11,
+    color: Colors.white,
+    opacity: 0.68,
+    marginTop: Spacing.xs,
+    marginLeft: 42,
+  },
+  greetingCountPill: {
+    minWidth: 34,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.white + '24',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  greetingCountText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
+    color: Colors.white,
   },
   chipsScroll: {
-    maxHeight: 40,
+    maxHeight: 44,
   },
   chipsContainer: {
-    paddingHorizontal: 10,
-    paddingTop: 0,
-    paddingBottom: 0,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: 2,
+    paddingBottom: 4,
     alignItems: 'center',
   },
   searchContainer: {
@@ -259,13 +371,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.input,
-    marginHorizontal: Spacing.md,
+    marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
     paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderWidth: 1,
     borderColor: Colors.divider,
     zIndex: 2,
+    ...Shadows.soft,
   },
   searchInput: {
     flex: 1,

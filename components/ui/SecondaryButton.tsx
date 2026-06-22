@@ -7,7 +7,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { Colors, Typography, BorderRadius, Spacing } from '../../constants/theme';
+import { Colors, Typography, BorderRadius, Spacing, Shadows } from '../../constants/theme';
 
 interface SecondaryButtonProps {
   title: string;
@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.button,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Colors.divider,
     paddingVertical: Spacing.md - 2,
     paddingHorizontal: Spacing.xl,
@@ -64,13 +64,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 52,
     gap: Spacing.sm,
+    ...Shadows.soft,
   },
   disabled: {
     opacity: 0.5,
   },
   text: {
     color: Colors.text,
-    fontFamily: Typography.bodyMed,
+    fontFamily: Typography.bodyBold,
     fontSize: 16,
     textAlign: 'center',
   },

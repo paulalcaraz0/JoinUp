@@ -12,8 +12,10 @@ import {
   Alert,
   Image,
   Linking,
+  RefreshControl,
+  Modal,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -28,17 +30,27 @@ import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import type { Message } from '../../types';
 
+type ChatPerson = {
+  id: string;
+  displayName: string;
+  photoUrl: string;
+};
+
 export default function GroupChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const { activities, getJoinStatus, canAccessChat } = useActivities();
-  const { messages, isLoading, sendMessage, sendImage, sendLocation, pinnedMessage } = useChat(id ?? '');
+  const { messages, isLoading, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch } = useChat(id ?? '');
 
   const [inputText, setInputText] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isSharingLocation, setIsSharingLocation] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInfoVisible, setIsInfoVisible] = useState(false);
+  const [chatPeople, setChatPeople] = useState<ChatPerson[]>([]);
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const flatListRef = useRef<FlatList<Message>>(null);
 
   const activity = useMemo(
@@ -47,15 +59,117 @@ export default function GroupChatScreen() {
   );
   const joinStatus = getJoinStatus(id ?? '');
   const isChatAllowed = canAccessChat(id ?? '', activity?.hostId);
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => !blockedUserIds.includes(message.senderId)),
+    [blockedUserIds, messages]
+  );
+  const latestOtherParticipant = useMemo(
+    () =>
+      [...visibleMessages]
+        .reverse()
+        .find((message) => message.senderId !== user?.uid && message.type !== 'system'),
+    [user?.uid, visibleMessages]
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchBlockedUsers = async () => {
+      if (!user?.uid) {
+        setBlockedUserIds([]);
+        return;
+      }
+
+      const { data, error } = await (supabase as any)
+        .from('user_blocks')
+        .select('blocked_user_id')
+        .eq('blocker_id', user.uid);
+
+      if (!isActive || error) return;
+      setBlockedUserIds(
+        (data ?? [])
+          .map((row: any) => row.blocked_user_id)
+          .filter((value: unknown): value is string => typeof value === 'string')
+      );
+    };
+
+    void fetchBlockedUsers();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchChatPeople = async () => {
+      if (!activity) {
+        setChatPeople([]);
+        return;
+      }
+
+      const ids = Array.from(new Set([activity.hostId, ...(activity.participants ?? [])].filter(Boolean)));
+      if (ids.length === 0) {
+        setChatPeople([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, display_name, photo_url')
+        .in('id', ids);
+
+      if (!isActive || error) return;
+
+      const profileMap = new Map(
+        (data ?? []).map((profile: any) => [
+          profile.id,
+          {
+            id: profile.id,
+            displayName: profile.display_name ?? '',
+            photoUrl: profile.photo_url ?? '',
+          } as ChatPerson,
+        ])
+      );
+
+      setChatPeople(ids.map((personId) => profileMap.get(personId) ?? {
+        id: personId,
+        displayName: personId === activity.hostId ? activity.hostName || 'Creator' : 'Participant',
+        photoUrl: personId === activity.hostId ? activity.hostPhoto || '' : '',
+      }));
+    };
+
+    void fetchChatPeople();
+
+    return () => {
+      isActive = false;
+    };
+  }, [activity]);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    if (messages.length > 0) {
+    if (visibleMessages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages.length]);
+  }, [visibleMessages.length]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void refetch();
+    }, [refetch])
+  );
+
+  const handleRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await refetch();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleSend = async () => {
     if (!inputText.trim() || !user) return;
@@ -109,27 +223,10 @@ export default function GroupChatScreen() {
       });
 
     if (error) throw error;
+    // Store the public URL so the message can be reloaded after navigation.
+    // The bucket is configured as public in Supabase, so this stays stable.
     const publicResp = (supabase as any).storage.from('chat-images').getPublicUrl(objectPath);
-    const publicUrl = publicResp.data?.publicUrl;
-
-    // Try fetching the public URL to ensure the bucket is public; if not, request a signed URL.
-    if (publicUrl) {
-      try {
-        const test = await fetch(publicUrl, { method: 'HEAD' });
-        if (test.ok) return publicUrl;
-      } catch {
-        // fallthrough to signed URL creation
-      }
-    }
-
-    // If public URL not accessible (private bucket), create a time-limited signed URL.
-    const signed = await (supabase as any).storage.from('chat-images').createSignedUrl(objectPath, 60 * 60);
-    if (signed.error || !signed.data?.signedUrl) {
-      // As a last resort return the publicUrl (may 403) so the DB has some value.
-      return publicUrl ?? '';
-    }
-
-    return signed.data.signedUrl;
+    return publicResp.data?.publicUrl ?? '';
   };
 
   const handleAttachPhoto = async () => {
@@ -191,6 +288,101 @@ export default function GroupChatScreen() {
     }
   };
 
+  const handleReportConversation = async () => {
+    if (!user?.uid || !id) return;
+
+    try {
+      const latestMessage = [...messages].reverse().find((message) => message.type !== 'system');
+
+      const { error } = await (supabase as any).from('content_reports').insert({
+        reporter_id: user.uid,
+        activity_id: id,
+        reported_user_id:
+          latestOtherParticipant?.senderId && latestOtherParticipant.senderId !== user.uid
+            ? latestOtherParticipant.senderId
+            : null,
+        message_id: latestMessage?.id ?? null,
+        reason: 'chat_safety',
+        details: 'User reported this chat conversation from the in-app safety menu.',
+      });
+
+      if (error) throw error;
+      Alert.alert('Report sent', 'Thanks. We will review this conversation.');
+    } catch {
+      Alert.alert('Report unavailable', 'Could not send the report right now. Please try again later.');
+    }
+  };
+
+  const handleBlockLatestParticipant = async () => {
+    if (!user?.uid || !latestOtherParticipant) {
+      Alert.alert('No participant to block', 'There are no other chat participants visible in this conversation yet.');
+      return;
+    }
+
+    try {
+      const blockedUserId = latestOtherParticipant.senderId;
+      const { error } = await (supabase as any).from('user_blocks').upsert(
+        {
+          blocker_id: user.uid,
+          blocked_user_id: blockedUserId,
+        },
+        { onConflict: 'blocker_id,blocked_user_id' }
+      );
+
+      if (error) throw error;
+      setBlockedUserIds((prev) => Array.from(new Set([...prev, blockedUserId])));
+      Alert.alert('User blocked', `${latestOtherParticipant.senderName || 'This user'} is now hidden from your chat.`);
+    } catch {
+      Alert.alert('Block unavailable', 'Could not block this user right now. Please try again later.');
+    }
+  };
+
+  const openSafetyMenu = () => {
+    Alert.alert(
+      'Chat safety',
+      'Report harmful content or hide messages from a participant.',
+      [
+        { text: 'Report conversation', onPress: handleReportConversation },
+        { text: 'Block latest participant', onPress: handleBlockLatestParticipant, style: 'destructive' },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
+
+  const canDeleteMessage = (message: Message) => {
+    if (message.type === 'system') return false;
+    return message.senderId === user?.uid || activity?.hostId === user?.uid;
+  };
+
+  const handleDeleteMessage = (message: Message) => {
+    if (!canDeleteMessage(message)) return;
+
+    const isOwnMessage = message.senderId === user?.uid;
+    Alert.alert(
+      'Delete message?',
+      isOwnMessage
+        ? 'This message will be removed from the chat.'
+        : 'As the host, you can remove this message from the chat.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const deleted = await deleteMessage(message.id);
+              if (!deleted) {
+                Alert.alert('Delete failed', 'You can only delete your own messages or messages in an activity you host.');
+              }
+            } catch {
+              Alert.alert('Delete failed', 'Could not delete this message right now.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderMessage = ({ item }: { item: Message }) => {
     const isMe = item.senderId === user?.uid;
     const isSystem = item.type === 'system';
@@ -223,6 +415,7 @@ export default function GroupChatScreen() {
           <TouchableOpacity
             activeOpacity={0.85}
             onPress={handleOpenMap}
+            onLongPress={() => handleDeleteMessage(item)}
             style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
           >
             <Ionicons name="location" size={18} color={isMe ? Colors.white : Colors.accent} />
@@ -239,10 +432,14 @@ export default function GroupChatScreen() {
     if (item.type === 'image' && item.imageUrl) {
       return (
         <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
-          <View style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}>
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onLongPress={() => handleDeleteMessage(item)}
+            style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+          >
             <Image source={{ uri: item.imageUrl }} style={styles.imageMessage} resizeMode="cover" />
             <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -254,12 +451,16 @@ export default function GroupChatScreen() {
             <Text style={styles.senderName}>{item.senderName}</Text>
           </View>
         )}
-        <View style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onLongPress={() => handleDeleteMessage(item)}
+          style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+        >
           <Text style={[styles.bubbleText, isMe && styles.bubbleTextSent]}>
             {item.text}
           </Text>
           <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
-        </View>
+        </TouchableOpacity>
       </View>
     );
   };
@@ -307,6 +508,14 @@ export default function GroupChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setIsInfoVisible(true)}
+          style={styles.infoBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Open activity information"
+        >
+          <Ionicons name="information" size={17} color={Colors.text} />
+        </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {activity?.title ?? 'Chat'}
@@ -315,7 +524,91 @@ export default function GroupChatScreen() {
             {activity?.participants.length ?? 0} participants
           </Text>
         </View>
+        <TouchableOpacity
+          onPress={openSafetyMenu}
+          style={styles.safetyBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Open chat safety options"
+        >
+          <Ionicons name="shield-checkmark-outline" size={22} color={Colors.text} />
+        </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={isInfoVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsInfoVisible(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.infoSheet, { paddingBottom: insets.bottom + Spacing.lg }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <View>
+                <Text style={styles.sheetTitle}>Activity Info</Text>
+                <Text style={styles.sheetSubtitle}>{chatPeople.length} people in this chat</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsInfoVisible(false)}
+                style={styles.sheetCloseBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Close activity information"
+              >
+                <Ionicons name="close" size={22} color={Colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            {activity ? (
+              <View style={styles.activityInfoCard}>
+                <Text style={styles.infoActivityTitle} numberOfLines={2}>{activity.title}</Text>
+                <View style={styles.infoMetaRow}>
+                  <Ionicons name="time-outline" size={14} color={Colors.slate} />
+                  <Text style={styles.infoMetaText}>
+                    {activity.dateTime ? format(new Date(activity.dateTime), 'EEE, MMM d • h:mm a') : 'Date TBD'}
+                  </Text>
+                </View>
+                <View style={styles.infoMetaRow}>
+                  <Ionicons name="location-outline" size={14} color={Colors.slate} />
+                  <Text style={styles.infoMetaText} numberOfLines={2}>
+                    {activity.location.name || 'Location TBD'}
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            <Text style={styles.peopleSectionTitle}>People</Text>
+            <View style={styles.peopleList}>
+              {chatPeople.map((person, index) => {
+                const isCreator = activity?.hostId === person.id;
+                const initial = (person.displayName || (isCreator ? 'C' : 'P')).trim().charAt(0).toUpperCase();
+
+                return (
+                  <View key={`${person.id}-${index}`} style={styles.personRow}>
+                    {person.photoUrl ? (
+                      <Image source={{ uri: person.photoUrl }} style={styles.personPhoto} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.personPlaceholder}>
+                        <Text style={styles.personInitial}>{initial}</Text>
+                      </View>
+                    )}
+                    <View style={styles.personInfo}>
+                      <Text style={styles.personName} numberOfLines={1}>
+                        {person.displayName || (isCreator ? 'Creator' : 'Participant')}
+                      </Text>
+                      <Text style={styles.personRole}>{isCreator ? 'Creator' : 'Participant'}</Text>
+                    </View>
+                    {isCreator ? (
+                      <View style={styles.creatorBadge}>
+                        <Text style={styles.creatorBadgeText}>Host</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Pinned message banner */}
       {pinnedMessage && (
@@ -332,7 +625,7 @@ export default function GroupChatScreen() {
         <View style={styles.eventBanner}>
           <Text style={styles.eventBannerText}>
             {activity.dateTime
-              ? `Tomorrow at ${format(new Date(activity.dateTime), 'h:mm a')}`
+              ? format(new Date(activity.dateTime), 'EEE, MMM d • h:mm a')
               : ''
             }
           </Text>
@@ -348,11 +641,19 @@ export default function GroupChatScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={visibleMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={Colors.accent}
+              colors={[Colors.accent]}
+            />
+          }
           onContentSizeChange={() =>
             flatListRef.current?.scrollToEnd({ animated: false })
           }
@@ -424,9 +725,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  infoBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: Colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.cream,
+  },
   headerInfo: {
     flex: 1,
     marginLeft: Spacing.sm,
+  },
+  safetyBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
     fontFamily: Typography.bodyBold,
@@ -437,6 +754,145 @@ const styles = StyleSheet.create({
     fontFamily: Typography.body,
     fontSize: 13,
     color: Colors.slate,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: Colors.overlay,
+  },
+  infoSheet: {
+    backgroundColor: Colors.cream,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
+    maxHeight: '82%',
+  },
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.divider,
+    alignSelf: 'center',
+    marginBottom: Spacing.md,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.md,
+  },
+  sheetTitle: {
+    fontFamily: Typography.display,
+    fontSize: 24,
+    color: Colors.text,
+  },
+  sheetSubtitle: {
+    fontFamily: Typography.body,
+    fontSize: 13,
+    color: Colors.slate,
+    marginTop: 2,
+  },
+  sheetCloseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.white,
+  },
+  activityInfoCard: {
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  infoActivityTitle: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 18,
+    color: Colors.text,
+    lineHeight: 24,
+    marginBottom: Spacing.sm,
+  },
+  infoMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: 4,
+  },
+  infoMetaText: {
+    flex: 1,
+    fontFamily: Typography.body,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  peopleSectionTitle: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 16,
+    color: Colors.text,
+    marginBottom: Spacing.sm,
+  },
+  peopleList: {
+    backgroundColor: Colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    overflow: 'hidden',
+  },
+  personRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    gap: Spacing.sm,
+  },
+  personPhoto: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+  },
+  personPlaceholder: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  personInitial: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 18,
+    color: Colors.white,
+  },
+  personInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  personName: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 14,
+    color: Colors.text,
+  },
+  personRole: {
+    fontFamily: Typography.body,
+    fontSize: 12,
+    color: Colors.slate,
+    marginTop: 2,
+  },
+  creatorBadge: {
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.accent + '14',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  creatorBadgeText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 11,
+    color: Colors.accent,
   },
   pinnedBanner: {
     flexDirection: 'row',

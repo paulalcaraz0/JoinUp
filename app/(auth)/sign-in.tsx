@@ -7,6 +7,7 @@ import {
   Platform,
   TouchableOpacity,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -21,7 +22,7 @@ import { useAuth } from '../../hooks/useAuth';
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signIn, signInWithGoogle, isLoading, error } = useAuth();
+  const { signIn, signInWithGoogle, resetPassword, isLoading, error } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,6 +36,20 @@ export default function SignInScreen() {
       // Router will be handled by auth state change in root layout
     } catch (e) {
       // Error is already set in auth hook state, UI will show it
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      Alert.alert('Email required', 'Enter your email address, then tap Forgot Password again.');
+      return;
+    }
+
+    try {
+      await resetPassword(email);
+      Alert.alert('Check your email', 'We sent password reset instructions to your email address.');
+    } catch {
+      // Error is already shown in the banner.
     }
   };
 
@@ -102,7 +117,11 @@ export default function SignInScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(300).springify()}>
-          <TouchableOpacity style={styles.forgotLink}>
+          <TouchableOpacity
+            style={styles.forgotLink}
+            onPress={handleForgotPassword}
+            disabled={isLoading}
+          >
             <Text style={styles.forgotText}>Forgot Password?</Text>
           </TouchableOpacity>
         </Animated.View>

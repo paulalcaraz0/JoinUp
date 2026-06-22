@@ -14,11 +14,15 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: {
           backgroundColor: Colors.white,
-          borderTopColor: Colors.divider,
-          borderTopWidth: 1,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom,
+          borderTopColor: 'transparent',
+          borderTopWidth: 0,
+          height: 68 + insets.bottom,
+          paddingBottom: insets.bottom + 4,
           paddingTop: 8,
+          marginHorizontal: 12,
+          marginBottom: Platform.OS === 'ios' ? 8 : 10,
+          borderRadius: 24,
+          position: 'absolute',
           ...Shadows.card,
         },
         tabBarActiveTintColor: Colors.accent,
@@ -26,7 +30,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: {
           fontFamily: Typography.bodyMed,
           fontSize: 11,
-          marginTop: 2,
+          marginTop: 3,
         },
       }}
     >
@@ -90,7 +94,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Platform.OS === 'ios' ? 16 : 8,
+    marginBottom: Platform.OS === 'ios' ? 18 : 10,
     ...Shadows.fab,
   },
   postButtonActive: {

@@ -14,10 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.joinup.app"
+      "bundleIdentifier": "com.paula.joinup",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "JoinUp uses your location when you choose to autofill an activity location or share your location in chat.",
+        "NSPhotoLibraryUsageDescription": "JoinUp lets you choose photos for your profile, activity covers, and chat messages."
+      }
     },
     "android": {
-      "package": "com.joinup.app",
+      "package": "com.paula.joinup",
       "adaptiveIcon": {
         "backgroundColor": "#1B2D45",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -26,7 +30,9 @@
       },
       "permissions": [
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -37,14 +43,29 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-location",
-      "expo-image-picker",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "JoinUp uses your location when you choose to autofill an activity location or share your location in chat."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "JoinUp lets you choose photos for your profile, activity covers, and chat messages."
+        }
+      ],
       "expo-notifications",
       "@react-native-community/datetimepicker",
       "expo-web-browser"
     ],
     "extra": {
-      "router": {}
+      "router": {},
+      "supabaseUrl": "https://jxxcrkjfsspicjrtallf.supabase.co",
+      "supabaseAnonKey": "sb_publishable_zDSqtc-I-NZmuntxq_ULBw_Vqy7Yhoo",
+      "eas": {
+        "projectId": "170a787f-ebe8-4a29-8e4e-454b5e55c4be"
+      }
     }
   }
 }

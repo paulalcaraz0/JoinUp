@@ -343,23 +343,20 @@ export function useAuth() {
 
         const normalizedEmail = data.email.trim().toLowerCase();
 
-        // Fast guard to avoid duplicate account attempts with the same email.
-        const { data: existingProfile, error: existingProfileError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('email', normalizedEmail)
-          .maybeSingle();
+        const { data: emailExists, error: emailCheckError } = await supabase.rpc(
+          'email_is_registered',
+          { input_email: normalizedEmail }
+        );
 
-        // Ignore missing-column errors for instances that have not run the latest migration yet.
-        const missingEmailColumn =
-          String((existingProfileError as any)?.message ?? '').toLowerCase().includes('column') &&
-          String((existingProfileError as any)?.message ?? '').toLowerCase().includes('email');
+        const missingEmailCheckFunction =
+          String((emailCheckError as any)?.message ?? '').toLowerCase().includes('email_is_registered') ||
+          String((emailCheckError as any)?.code ?? '') === 'PGRST202';
 
-        if (existingProfileError && !missingEmailColumn) {
-          throw existingProfileError;
+        if (emailCheckError && !missingEmailCheckFunction) {
+          throw emailCheckError;
         }
 
-        if (existingProfile) {
+        if (emailExists) {
           throw new Error('This email is already registered. Please sign in instead.');
         }
 
@@ -420,6 +417,29 @@ export function useAuth() {
       }
     },
     [setLoading, setUser]
+  );
+
+  const resetPassword = useCallback(
+    async (email: string) => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail) {
+          throw new Error('Enter your email address first.');
+        }
+
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail);
+        if (resetError) throw resetError;
+      } catch (err: any) {
+        setError(err.message ?? 'Failed to send password reset email.');
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setLoading]
   );
 
   const signInWithGoogle = useCallback(async () => {
@@ -566,6 +586,7 @@ export function useAuth() {
     error,
     signIn,
     signUp,
+    resetPassword,
     signInWithGoogle,
     signOut: handleSignOut,
     setUser,

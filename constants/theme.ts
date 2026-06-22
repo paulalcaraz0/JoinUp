@@ -2,20 +2,23 @@ import { Platform } from 'react-native';
 
 /* ── Brand tokens ─────────────────────────────────────────── */
 export const Colors = {
-  primary: '#1B2D45',
+  primary: '#152238',
   accent: '#FF6B35',
   peach: '#F7C59F',
-  cream: '#FFF5EF',
-  slate: '#8C9BB5',
+  cream: '#F7F8FA',
   white: '#FFFFFF',
-  text: '#1B2D45',
-  textSecondary: '#5A6E8C',
-  divider: '#E8ECF1',
+  surface: '#FFFFFF',
+  surfaceElevated: '#FFFCFA',
+  mutedSurface: '#EEF2F7',
+  slate: '#8A96A8',
+  text: '#152238',
+  textSecondary: '#526173',
+  divider: '#E4E8EF',
   success: '#2ECC71',
   warning: '#F39C12',
   error: '#E74C3C',
   danger: '#E74C3C',
-  overlay: 'rgba(27,45,69,0.5)',
+  overlay: 'rgba(21,34,56,0.56)',
 } as const;
 
 export const Typography = {
@@ -32,28 +35,42 @@ export const Spacing = {
   md: 16,
   lg: 24,
   xl: 32,
+  xxl: 40,
+  xxxl: 48,
 } as const;
 
 export const BorderRadius = {
   sm: 8,
-  card: 16,
+  card: 12,
   pill: 24,
   full: 9999,
-  input: 12,
-  button: 12,
+  input: 14,
+  button: 14,
   sheet: 24,
 } as const;
 
 export const Shadows = {
   card: Platform.select({
     web: {
-      boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
+      boxShadow: '0px 10px 24px rgba(21, 34, 56, 0.10)',
     },
     default: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
+      shadowColor: '#152238',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.10,
+      shadowRadius: 18,
+      elevation: 5,
+    },
+  }),
+  soft: Platform.select({
+    web: {
+      boxShadow: '0px 6px 16px rgba(21, 34, 56, 0.07)',
+    },
+    default: {
+      shadowColor: '#152238',
+      shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.08,
-      shadowRadius: 8,
+      shadowRadius: 12,
       elevation: 3,
     },
   }),

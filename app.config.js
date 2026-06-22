@@ -9,8 +9,8 @@ module.exports = ({ config } = {}) => {
     ...baseConfig,
     extra: {
       ...(baseConfig.extra ?? {}),
-      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
-      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_KEY,
+      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? baseConfig.extra?.supabaseUrl,
+      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_KEY ?? baseConfig.extra?.supabaseAnonKey,
     },
   };
 };

@@ -361,6 +361,15 @@ export function useActivities() {
       nextStatuses[row.activity_id] = normalizeStatus(row.status);
     });
 
+    const approvedActivityIds = (data ?? [])
+      .filter((row: any) => normalizeStatus(row.status) === 'approved')
+      .map((row: any) => row.activity_id)
+      .filter((activityId: string) => !((user?.activitiesJoined ?? []).includes(activityId)));
+
+    if (approvedActivityIds.length > 0) {
+      await Promise.all(approvedActivityIds.map((activityId) => syncJoinedActivities(activityId, true)));
+    }
+
     // Critical: For each activity in profile's activitiesJoined, ensure it has a join status.
     // This is especially important on page reload to restore previous joins.
     joinedIds.forEach((activityId) => {
@@ -381,7 +390,7 @@ export function useActivities() {
     setJoinStatuses(nextStatuses);
     localJoinStatusHistoryRef.current = nextStatuses;
     void persistLocalJoinStatusHistory(nextStatuses);
-  }, [isMockActivity, localJoinedIds, normalizeStatus, persistLocalJoinStatusHistory, user?.activitiesJoined, user?.uid]);
+  }, [isMockActivity, localJoinedIds, normalizeStatus, persistLocalJoinStatusHistory, syncJoinedActivities, user?.activitiesJoined, user?.uid]);
 
   const resolveDueJoinRequests = useCallback(async () => {
     if (!user?.uid) return;
@@ -700,7 +709,8 @@ export function useActivities() {
 
       // For real activities, insert into participants table
       if (!isMockActivity(activityId)) {
-        const decisionDueAt = new Date(Date.now() + delayRangeMs()).toISOString();
+        const requiresApproval = currentActivity.requiresApproval;
+        const decisionDueAt = requiresApproval ? null : new Date(Date.now() + delayRangeMs()).toISOString();
         const { error: joinError } = await supabase
           .from('participants')
           .insert({
@@ -722,21 +732,25 @@ export function useActivities() {
             .insert({
               activity_id: activityId,
               user_id: userId,
-              status: 'joined',
+              status: currentActivity.requiresApproval ? 'pending' : 'joined',
             });
 
           if (fallbackError) throw fallbackError;
 
-          // Legacy schema does not support pending lifecycle; treat as immediately approved.
-          setJoinStatuses((prev) => ({ ...prev, [activityId]: 'approved' }));
+          setJoinStatuses((prev) => ({
+            ...prev,
+            [activityId]: currentActivity.requiresApproval ? 'pending' : 'approved',
+          }));
         }
       } else {
         // For mock activities, schedule auto-approval immediately (no DB insert needed)
         void scheduleMockDecision(activityId, userId, currentActivity.title);
       }
 
-      // Persist joined activity IDs so chat visibility survives hook remounts and refreshes.
-      await syncJoinedActivities(activityId, true);
+      // Persist joined activity IDs only for auto-resolved flows.
+      if (!currentActivity.requiresApproval) {
+        await syncJoinedActivities(activityId, true);
+      }
       const nextHistory = { ...localJoinStatusHistoryRef.current, [activityId]: 'pending' as JoinRequestStatus };
       localJoinStatusHistoryRef.current = nextHistory;
       void persistLocalJoinStatusHistory(nextHistory);
@@ -830,6 +844,91 @@ export function useActivities() {
     }
   }, [isMockActivity, joinStatuses, persistLocalJoinStatusHistory, user?.uid]);
 
+  const respondToJoinRequest = useCallback(async (activityId: string, requesterId: string, approved: boolean): Promise<boolean> => {
+    if (!user?.uid) return false;
+
+    try {
+      const currentActivity = activities.find((activity) => activity.id === activityId);
+      if (isMockActivity(activityId)) {
+        if (!currentActivity || currentActivity.hostId !== user.uid || !currentActivity.requiresApproval) {
+          setError('Only the activity host can update join requests.');
+          return false;
+        }
+      }
+
+      if (!isMockActivity(activityId)) {
+        const { data, error: rpcError } = await supabase.rpc('respond_to_join_request', {
+          p_activity_id: activityId,
+          p_requester_id: requesterId,
+          p_approved: approved,
+        });
+
+        if (rpcError) {
+          const message = [rpcError.message, rpcError.details, rpcError.hint]
+            .filter(Boolean)
+            .join(' ');
+          const canFallback =
+            message.toLowerCase().includes('function') ||
+            message.toLowerCase().includes('respond_to_join_request') ||
+            message.toLowerCase().includes('schema cache');
+
+          if (!canFallback) throw rpcError;
+        } else if (data) {
+          await fetchJoinStatuses();
+          await fetchActivities();
+          return true;
+        } else {
+          setError('No pending request was found, or only the activity host can approve it.');
+          return false;
+        }
+
+        const { data: updatedRows, error: updateError } = await supabase
+          .from('participants')
+          .update({
+            status: approved ? 'approved' : 'rejected',
+            resolved_at: new Date().toISOString(),
+            decision_due_at: null,
+          })
+          .eq('activity_id', activityId)
+          .eq('user_id', requesterId)
+          .eq('status', 'pending')
+          .select('id');
+
+        if (updateError) throw updateError;
+        if (!updatedRows || updatedRows.length === 0) {
+          setError('No pending request was found for this user.');
+          return false;
+        }
+
+        await supabase.from('notifications').insert({
+          user_id: requesterId,
+          type: 'approval',
+          title: approved ? 'Join request approved' : 'Join request not approved',
+          body: approved
+            ? `${currentActivity?.title ?? 'Your activity'} join request was approved.`
+            : `${currentActivity?.title ?? 'Your activity'} join request was not approved.`,
+          activity_id: activityId,
+          read: false,
+        });
+      }
+
+      await fetchJoinStatuses();
+      await fetchActivities();
+      return true;
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to update join request');
+      return false;
+    }
+  }, [activities, fetchActivities, fetchJoinStatuses, isMockActivity, user?.uid]);
+
+  const approveJoinRequest = useCallback(async (activityId: string, requesterId: string): Promise<boolean> => {
+    return respondToJoinRequest(activityId, requesterId, true);
+  }, [respondToJoinRequest]);
+
+  const rejectJoinRequest = useCallback(async (activityId: string, requesterId: string): Promise<boolean> => {
+    return respondToJoinRequest(activityId, requesterId, false);
+  }, [respondToJoinRequest]);
+
   const deleteHostedActivity = useCallback(async (activityId: string): Promise<boolean> => {
     if (!user?.uid) return false;
 
@@ -921,6 +1020,8 @@ export function useActivities() {
     joinActivity,
     leaveActivity,
     deleteRejectedJoin,
+    approveJoinRequest,
+    rejectJoinRequest,
     deleteHostedActivity,
     getJoinStatus,
     canAccessChat,

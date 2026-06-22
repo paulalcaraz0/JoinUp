@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { Colors, Typography, Spacing } from '../../constants/theme';
+import { Colors, Typography, Spacing, Shadows } from '../../constants/theme';
 
 interface NavBarProps {
   title?: string;
@@ -51,9 +51,13 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.sm,
-    minHeight: 48,
+    minHeight: 58,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    ...Shadows.soft,
   },
   left: {
     width: 48,
@@ -68,13 +72,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   backButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.cream,
   },
   title: {
     fontFamily: Typography.bodyBold,
-    fontSize: 18,
+    fontSize: 19,
   },
 });
