@@ -14,6 +14,8 @@ import {
   Linking,
   RefreshControl,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -206,6 +208,9 @@ export default function GroupChatScreen() {
   const [chatPeople, setChatPeople] = useState<ChatPerson[]>([]);
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const flatListRef = useRef<FlatList<Message>>(null);
+  const shouldAutoScrollRef = useRef(false);
+  const hasScrolledToInitialBottomRef = useRef(false);
+  const isNearBottomRef = useRef(true);
 
   const activity = useMemo(
     () => activities.find((a) => a.id === id),
@@ -217,6 +222,7 @@ export default function GroupChatScreen() {
     () => messages.filter((message) => !blockedUserIds.includes(message.senderId)),
     [blockedUserIds, messages]
   );
+  const latestVisibleMessageId = visibleMessages[visibleMessages.length - 1]?.id ?? '';
   const latestOtherParticipant = useMemo(
     () =>
       [...visibleMessages]
@@ -301,14 +307,31 @@ export default function GroupChatScreen() {
     };
   }, [activity]);
 
-  // Auto-scroll to bottom on new messages
+  const scrollToBottom = useCallback((animated: boolean) => {
+    flatListRef.current?.scrollToEnd({ animated });
+  }, []);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    isNearBottomRef.current = distanceFromBottom <= 120;
+  }, []);
+
   useEffect(() => {
-    if (visibleMessages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+    if (!latestVisibleMessageId) return;
+
+    if (!hasScrolledToInitialBottomRef.current) {
+      scrollToBottom(false);
+      hasScrolledToInitialBottomRef.current = true;
+      shouldAutoScrollRef.current = false;
+      return;
     }
-  }, [visibleMessages.length]);
+
+    if (shouldAutoScrollRef.current || isNearBottomRef.current) {
+      scrollToBottom(true);
+      shouldAutoScrollRef.current = false;
+    }
+  }, [latestVisibleMessageId, scrollToBottom]);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -335,9 +358,11 @@ export default function GroupChatScreen() {
     }
 
     setInputText('');
+    shouldAutoScrollRef.current = true;
     try {
       await sendMessage(text, user.uid, user.displayName);
     } catch (error: any) {
+      shouldAutoScrollRef.current = false;
       setInputText(text);
       Alert.alert('Message not sent', error?.message ?? 'Could not send this message. Please try again.');
     }
@@ -416,8 +441,10 @@ export default function GroupChatScreen() {
       if (result.canceled || !result.assets?.[0]?.uri) return;
 
       const publicUrl = await uploadChatImage(result.assets[0]);
+      shouldAutoScrollRef.current = true;
       await sendImage(publicUrl, user.uid, user.displayName);
     } catch (error) {
+      shouldAutoScrollRef.current = false;
       Alert.alert('Upload failed', 'Could not attach this photo. Please try again.');
     } finally {
       setIsUploadingImage(false);
@@ -446,7 +473,9 @@ export default function GroupChatScreen() {
         user.uid,
         user.displayName
       );
+      shouldAutoScrollRef.current = true;
     } catch (error) {
+      shouldAutoScrollRef.current = false;
       Alert.alert('Location unavailable', 'Could not get your current location.');
     } finally {
       setIsSharingLocation(false);
@@ -552,10 +581,6 @@ export default function GroupChatScreen() {
     ),
     [activity?.hostId, handleDeleteMessage, user?.uid]
   );
-
-  const handleContentSizeChange = useCallback(() => {
-    flatListRef.current?.scrollToEnd({ animated: false });
-  }, []);
 
   if (activity && !isChatAllowed) {
     const isRejected = joinStatus === 'rejected';
@@ -738,6 +763,8 @@ export default function GroupChatScreen() {
           renderItem={renderMessage}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -745,9 +772,6 @@ export default function GroupChatScreen() {
               tintColor={Colors.accent}
               colors={[Colors.accent]}
             />
-          }
-          onContentSizeChange={() =>
-            flatListRef.current?.scrollToEnd({ animated: false })
           }
         />
       )}

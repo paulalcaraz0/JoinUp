@@ -49,6 +49,8 @@ type UploadPayload = {
 
 type ParticipantRowProps = {
   userId: string;
+  displayName: string;
+  photoUrl: string;
   index: number;
   hostId: string;
   onRemove: (userId: string) => void;
@@ -77,6 +79,8 @@ const isWebBlobFile = (value: unknown): value is Blob => {
 
 const ParticipantRow = React.memo(function ParticipantRow({
   userId,
+  displayName,
+  photoUrl,
   index,
   hostId,
   onRemove,
@@ -89,11 +93,15 @@ const ParticipantRow = React.memo(function ParticipantRow({
     <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
       <View style={[styles.participantRow, Shadows.card]}>
         <View style={styles.participantAvatar}>
-          <Ionicons name="person" size={18} color={Colors.white} />
+          {photoUrl ? (
+            <Image source={{ uri: photoUrl }} style={styles.participantAvatarImage} resizeMode="cover" />
+          ) : (
+            <Ionicons name="person" size={18} color={Colors.white} />
+          )}
         </View>
         <View style={styles.participantInfo}>
           <Text style={styles.participantName}>
-            {userId === hostId ? `${userId} (Host)` : userId}
+            {userId === hostId ? `${displayName || userId} (Host)` : displayName || userId}
           </Text>
         </View>
         {userId !== hostId && (
@@ -119,6 +127,7 @@ export default function ManageActivityScreen() {
     activities,
     error: activityError,
     leaveActivity,
+    cancelHostedActivity,
     approveJoinRequest,
     rejectJoinRequest,
     refetch,
@@ -126,8 +135,10 @@ export default function ManageActivityScreen() {
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<PendingJoinRequest[]>([]);
+  const [participantProfiles, setParticipantProfiles] = useState<Record<string, { displayName: string; photoUrl: string }>>({});
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [isCancellingActivity, setIsCancellingActivity] = useState(false);
 
   const activity = useMemo(
     () => activities.find((a) => a.id === id) ?? null,
@@ -192,6 +203,39 @@ export default function ManageActivityScreen() {
     }
   }, [activity?.id, activity?.requiresApproval]);
 
+  const fetchParticipantProfiles = useCallback(async () => {
+    if (!activity?.participants?.length) {
+      setParticipantProfiles({});
+      return;
+    }
+
+    try {
+      const participantIds = Array.from(new Set(activity.participants.filter(Boolean)));
+
+      const { data: profileRows, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, display_name, photo_url')
+        .in('id', participantIds);
+
+      if (profileError) throw profileError;
+
+      const profileMap = (profileRows ?? []).reduce<Record<string, { displayName: string; photoUrl: string }>>(
+        (acc, profile) => {
+          acc[profile.id] = {
+            displayName: profile.display_name ?? '',
+            photoUrl: profile.photo_url ?? '',
+          };
+          return acc;
+        },
+        {}
+      );
+
+      setParticipantProfiles(profileMap);
+    } catch {
+      setParticipantProfiles({});
+    }
+  }, [activity?.participants]);
+
   useEffect(() => {
     let isActive = true;
 
@@ -202,6 +246,21 @@ export default function ManageActivityScreen() {
       isActive = false;
     };
   }, [fetchPendingRequests]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadParticipantProfiles = async () => {
+      await fetchParticipantProfiles();
+    };
+
+    if (!isActive) return;
+    void loadParticipantProfiles();
+
+    return () => {
+      isActive = false;
+    };
+  }, [fetchParticipantProfiles]);
 
   const createUploadPayload = async (image: PickedImage): Promise<UploadPayload> => {
     if (typeof image.fileSize === 'number' && image.fileSize <= 0) {
@@ -439,17 +498,31 @@ export default function ManageActivityScreen() {
   };
 
   const handleCancelActivity = () => {
+    if (!activity || activity.hostId !== user?.uid) return;
+
     Alert.alert(
       'Cancel Activity',
-      'Are you sure you want to cancel this activity? All participants will be notified.',
+      'Are you sure you want to cancel this activity? It will no longer be joinable.',
       [
         { text: 'Keep', style: 'cancel' },
         {
           text: 'Cancel Activity',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert('Activity cancelled');
-            router.back();
+          onPress: async () => {
+            setIsCancellingActivity(true);
+            try {
+              const cancelled = await cancelHostedActivity(activity.id);
+              if (!cancelled) {
+                Alert.alert('Cancel failed', activityError ?? 'Could not cancel this activity.');
+                return;
+              }
+
+              Alert.alert('Activity cancelled', 'The activity is no longer joinable.', [
+                { text: 'OK', onPress: () => router.back() },
+              ]);
+            } finally {
+              setIsCancellingActivity(false);
+            }
           },
         },
       ]
@@ -460,12 +533,20 @@ export default function ManageActivityScreen() {
     ({ item, index }: { item: string; index: number }) => (
       <ParticipantRow
         userId={item}
+        displayName={
+          participantProfiles[item]?.displayName ||
+          (item === activity?.hostId ? activity?.hostName || '' : '')
+        }
+        photoUrl={
+          participantProfiles[item]?.photoUrl ||
+          (item === activity?.hostId ? activity?.hostPhoto || '' : '')
+        }
         index={index}
         hostId={activity?.hostId ?? ''}
         onRemove={handleRemoveParticipant}
       />
     ),
-    [activity?.hostId, handleRemoveParticipant]
+    [activity?.hostId, activity?.hostName, activity?.hostPhoto, handleRemoveParticipant, participantProfiles]
   );
 
   if (!activity) {
@@ -593,6 +674,7 @@ export default function ManageActivityScreen() {
           <TouchableOpacity
             style={styles.cancelBtn}
             onPress={handleCancelActivity}
+            disabled={isCancellingActivity}
           >
             <Ionicons name="trash-outline" size={18} color={Colors.danger} />
             <Text style={styles.cancelBtnText}>Cancel Activity</Text>
@@ -662,6 +744,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
+    overflow: 'hidden',
+  },
+  participantAvatarImage: {
+    width: '100%',
+    height: '100%',
   },
   participantInfo: {
     flex: 1,

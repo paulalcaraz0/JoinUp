@@ -937,6 +937,60 @@ export function useActivities() {
     user,
   ]);
 
+  const cancelHostedActivity = useCallback(async (activityId: string): Promise<boolean> => {
+    if (!user?.uid) return false;
+
+    try {
+      const currentActivity = activities.find((activity) => activity.id === activityId);
+      if (currentActivity && currentActivity.hostId !== user.uid) return false;
+
+      if (!isMockActivity(activityId)) {
+        await activityService.updateActivity(activityId, {
+          status: ActivityStatus.cancelled,
+        });
+      }
+
+      removeActivity(activityId);
+
+      setJoinStatuses((prev) => {
+        const next = { ...prev };
+        delete next[activityId];
+        return next;
+      });
+
+      const nextHistory = { ...localJoinStatusHistoryRef.current };
+      delete nextHistory[activityId];
+      localJoinStatusHistoryRef.current = nextHistory;
+      void persistLocalJoinStatusHistory(nextHistory);
+
+      const nextLocalJoined = localJoinedIds.filter((joinedId) => joinedId !== activityId);
+      setLocalJoinedIds(nextLocalJoined);
+      void persistLocalJoinedIds(nextLocalJoined);
+
+      const nextJoinedActivities = (user.activitiesJoined ?? []).filter((joinedId) => joinedId !== activityId);
+      const nextHostedActivities = (user.activitiesHosted ?? []).filter((hostedId) => hostedId !== activityId);
+      updateUser({
+        activitiesJoined: nextJoinedActivities,
+        activitiesHosted: nextHostedActivities,
+      });
+
+      return true;
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to cancel hosted activity');
+      return false;
+    }
+  }, [
+    activities,
+    isMockActivity,
+    localJoinedIds,
+    persistLocalJoinStatusHistory,
+    persistLocalJoinedIds,
+    removeActivity,
+    setJoinStatuses,
+    updateUser,
+    user,
+  ]);
+
   const getJoinStatus = useCallback(
     (activityId: string): JoinRequestStatus | null => joinStatuses[activityId] ?? null,
     [joinStatuses]
@@ -971,6 +1025,7 @@ export function useActivities() {
     approveJoinRequest,
     rejectJoinRequest,
     deleteHostedActivity,
+    cancelHostedActivity,
     getJoinStatus,
     canAccessChat,
     getActivity,

@@ -1,15 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  FlatList,
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Image,
   Dimensions,
   Pressable,
   TextInput,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +23,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { useActivities } from '../../hooks/useActivities';
 import { useLocation } from '../../hooks/useLocation';
 import { useUsers } from '../../hooks/useUsers';
+import type { Activity, User } from '../../types';
 import { format } from 'date-fns';
 
 const { width } = Dimensions.get('window');
@@ -200,6 +202,176 @@ export default function ExploreScreen() {
     };
   }, [users]);
 
+  const renderActivityItem = useCallback(
+    ({ item, index }: { item: Activity; index: number }) => {
+      const chipColor = CategoryColors[item.category] ?? Colors.accent;
+      const joined = item.maxSlots - item.currentSlots;
+      const dateStr = item.dateTime ? format(new Date(item.dateTime), 'EEE, h:mm a') : '';
+
+      return (
+        <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
+          <TouchableOpacity
+            style={[styles.exploreCard, Shadows.card]}
+            onPress={() => router.push(`/activity/${item.id}`)}
+            activeOpacity={0.92}
+          >
+            <View style={styles.coverImage}>
+              {item.coverImage ? (
+                <Image
+                  source={{ uri: item.coverImage }}
+                  style={styles.coverPhoto}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.coverPlaceholder}>
+                  <Ionicons name="image-outline" size={40} color={Colors.slate} />
+                </View>
+              )}
+            </View>
+
+            <View style={styles.cardInfo}>
+              <View style={styles.cardInfoTop}>
+                <View
+                  style={[
+                    styles.categoryChip,
+                    { backgroundColor: chipColor + '18', borderColor: chipColor },
+                  ]}
+                >
+                  <Text style={[styles.categoryText, { color: chipColor }]}>
+                    {item.category}
+                  </Text>
+                </View>
+                <Text style={styles.joinedText}>
+                  {joined}/{item.maxSlots} joined
+                </Text>
+              </View>
+
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+
+              <View style={styles.cardMeta}>
+                <View style={styles.metaItem}>
+                  <Ionicons name="location-outline" size={14} color={Colors.slate} />
+                  <Text style={styles.metaText} numberOfLines={2}>
+                    {item.location.name}
+                  </Text>
+                </View>
+                <Text style={styles.metaText} numberOfLines={1}>
+                  {dateStr}
+                </Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      );
+    },
+    [router]
+  );
+
+  const renderUserItem = useCallback(
+    ({ item: profile, index }: { item: User; index: number }) => (
+      <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
+        <TouchableOpacity
+          style={[styles.userCard, Shadows.card]}
+          onPress={() => router.push(`/users/${profile.uid}`)}
+          activeOpacity={0.92}
+        >
+          <View style={styles.userAccentBar} />
+          <View style={styles.userPhotoContainer}>
+            {profile.photoURL ? (
+              <Image
+                source={{ uri: profile.photoURL }}
+                style={styles.userPhoto}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.userPhotoPlaceholder}>
+                <Text style={styles.userInitial}>
+                  {(profile.displayName || 'A').trim().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={styles.userOnlineDot} />
+          </View>
+
+          <View style={styles.userInfo}>
+            <View style={styles.userHeader}>
+              <View style={styles.userTitleBlock}>
+                <Text style={styles.userName} numberOfLines={1}>
+                  {profile.displayName || 'Anonymous'}
+                </Text>
+                <View style={styles.userMetaRow}>
+                  {profile.verificationStatus === 'verified' ? (
+                    <View style={styles.verifiedPill}>
+                      <Ionicons name="shield-checkmark" size={12} color={Colors.success} />
+                      <Text style={styles.verifiedText}>Verified ID</Text>
+                    </View>
+                  ) : null}
+                  {profile.location ? (
+                    <View style={styles.userMetaPill}>
+                      <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
+                      <Text style={styles.userMetaText} numberOfLines={1}>
+                        {profile.location}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.userMetaPill}>
+                    <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
+                    <Text style={styles.userMetaText}>{profile.ageRange}</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.ratingContainer}>
+                <Ionicons name="star" size={13} color={Colors.accent} />
+                <Text style={styles.ratingText}>
+                  {profile.ratingCount > 0 ? profile.rating.toFixed(1) : 'New'}
+                </Text>
+              </View>
+            </View>
+
+            {profile.bio ? (
+              <Text style={styles.userBio} numberOfLines={2}>
+                {profile.bio}
+              </Text>
+            ) : null}
+
+            {profile.interests.length > 0 ? (
+              <View style={styles.interestsContainer}>
+                {profile.interests.slice(0, 3).map((interest) => (
+                  <View key={interest} style={styles.interestTag}>
+                    <Text style={styles.interestText}>{interest}</Text>
+                  </View>
+                ))}
+                {profile.interests.length > 3 ? (
+                  <Text style={styles.moreInterests}>+{profile.interests.length - 3}</Text>
+                ) : null}
+              </View>
+            ) : (
+              <Text style={styles.userBio} numberOfLines={1}>
+                No interests added yet
+              </Text>
+            )}
+
+            <View style={styles.userFooter}>
+              <View style={styles.joinedMiniStat}>
+                <Ionicons name="calendar-outline" size={13} color={Colors.slate} />
+                <Text style={styles.joinedMiniText}>
+                  {profile.activitiesJoined.length} joined
+                </Text>
+              </View>
+              <View style={styles.viewProfilePill}>
+                <Text style={styles.viewProfileText}>View profile</Text>
+                <Ionicons name="chevron-forward" size={14} color={Colors.accent} />
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    ),
+    [router]
+  );
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -322,262 +494,116 @@ export default function ExploreScreen() {
         </View>
       ) : null}
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
-      >
-        {viewMode === 'events' ? (
-          <>
-            <Text style={styles.sectionTitle}>Happening Near You</Text>
+      {viewMode === 'events' ? (
+        <View style={styles.listShell}>
+          <Text style={styles.sectionTitle}>Happening Near You</Text>
 
-            {activitiesLoading ? (
-              <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
-            ) : activitiesError && activities.length === 0 ? (
-              <EmptyState
-                icon="alert-circle-outline"
-                title="Could not load activities"
-                message={activitiesError}
-                actionLabel="Try again"
-                onAction={() => {
-                  void refetchActivities();
-                }}
-                style={styles.inlineEmptyState}
-              />
-            ) : filteredActivities.length === 0 ? (
-              <EmptyState
-                icon="calendar-outline"
-                title="No activities found"
-                message={eventSearchQuery ? 'No activities found matching your search.' : 'No activities found for this place yet.'}
-                actionLabel="Refresh"
-                onAction={() => {
-                  void refetchActivities();
-                }}
-                style={styles.inlineEmptyState}
-              />
-            ) : filteredActivities.map((activity, index) => {
-            const chipColor = CategoryColors[activity.category] ?? Colors.accent;
-            const joined = activity.maxSlots - activity.currentSlots;
-            const dateStr = activity.dateTime
-              ? format(new Date(activity.dateTime), 'EEE, h:mm a')
-              : '';
-
-            return (
-              <Animated.View
-                key={activity.id}
-                entering={FadeInDown.delay(index * 80).springify()}
-              >
-                <TouchableOpacity
-                  style={[styles.exploreCard, Shadows.card]}
-                  onPress={() => router.push(`/activity/${activity.id}`)}
-                  activeOpacity={0.92}
-                >
-                  {/* Cover image */}
-                  <View style={styles.coverImage}>
-                    {activity.coverImage ? (
-                      <Image
-                        source={{ uri: activity.coverImage }}
-                        style={styles.coverPhoto}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.coverPlaceholder}>
-                        <Ionicons name="image-outline" size={40} color={Colors.slate} />
-                      </View>
-                    )}
-
-                  </View>
-
-                  {/* Card info */}
-                  <View style={styles.cardInfo}>
-                    <View style={styles.cardInfoTop}>
-                      <View
-                        style={[
-                          styles.categoryChip,
-                          { backgroundColor: chipColor + '18', borderColor: chipColor },
-                        ]}
-                      >
-                        <Text style={[styles.categoryText, { color: chipColor }]}>
-                          {activity.category}
-                        </Text>
-                      </View>
-                      <Text style={styles.joinedText}>
-                        {joined}/{activity.maxSlots} joined
-                      </Text>
-                    </View>
-
-                    <Text style={styles.cardTitle} numberOfLines={2}>
-                      {activity.title}
-                    </Text>
-
-                    <View style={styles.cardMeta}>
-                      <View style={styles.metaItem}>
-                        <Ionicons name="location-outline" size={14} color={Colors.slate} />
-                        <Text style={styles.metaText} numberOfLines={2}>
-                          {activity.location.name}
-                        </Text>
-                      </View>
-                      <Text style={styles.metaText} numberOfLines={1}>
-                        {dateStr}
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              </Animated.View>
-            );
-            })}
-          </>
-        ) : (
-          <>
-            <View style={styles.peopleHeader}>
-              <View>
-                <Text style={styles.sectionTitleNoMargin}>Discover People</Text>
-                <Text style={styles.peopleSubtitle}>
-                  {peopleSummary.userCount} {peopleSummary.userCount === 1 ? 'member' : 'members'} ready to join activities
-                </Text>
-              </View>
-              <View style={styles.peopleHeaderIcon}>
-                <Ionicons name="people" size={22} color={Colors.accent} />
-              </View>
+          {activitiesLoading ? (
+            <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+          ) : activitiesError && activities.length === 0 ? (
+            <EmptyState
+              icon="alert-circle-outline"
+              title="Could not load activities"
+              message={activitiesError}
+              actionLabel="Try again"
+              onAction={() => {
+                void refetchActivities();
+              }}
+              style={styles.inlineEmptyState}
+            />
+          ) : filteredActivities.length === 0 ? (
+            <EmptyState
+              icon="calendar-outline"
+              title="No activities found"
+              message={eventSearchQuery ? 'No activities found matching your search.' : 'No activities found for this place yet.'}
+              actionLabel="Refresh"
+              onAction={() => {
+                void refetchActivities();
+              }}
+              style={styles.inlineEmptyState}
+            />
+          ) : (
+            <FlatList
+              style={styles.list}
+              data={filteredActivities}
+              keyExtractor={(item) => item.id}
+              renderItem={renderActivityItem}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              initialNumToRender={6}
+              maxToRenderPerBatch={6}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS === 'android'}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
+        </View>
+      ) : (
+        <View style={styles.listShell}>
+          <View style={styles.peopleHeader}>
+            <View>
+              <Text style={styles.sectionTitleNoMargin}>Discover People</Text>
+              <Text style={styles.peopleSubtitle}>
+                {peopleSummary.userCount} {peopleSummary.userCount === 1 ? 'member' : 'members'} ready to join activities
+              </Text>
             </View>
+            <View style={styles.peopleHeaderIcon}>
+              <Ionicons name="people" size={22} color={Colors.accent} />
+            </View>
+          </View>
 
-            {peopleSummary.topInterests.length > 0 ? (
-              <View style={styles.trendingRow}>
-                <Text style={styles.trendingLabel}>Popular</Text>
-                {peopleSummary.topInterests.map((interest) => (
-                  <View key={interest} style={styles.trendingChip}>
-                    <Text style={styles.trendingChipText}>{interest}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
+          {peopleSummary.topInterests.length > 0 ? (
+            <View style={styles.trendingRow}>
+              <Text style={styles.trendingLabel}>Popular</Text>
+              {peopleSummary.topInterests.map((interest) => (
+                <View key={interest} style={styles.trendingChip}>
+                  <Text style={styles.trendingChipText}>{interest}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
-            {usersLoading ? (
-              <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
-            ) : usersError && users.length === 0 ? (
-              <EmptyState
-                icon="alert-circle-outline"
-                title="Could not load people"
-                message={usersError}
-                actionLabel="Try again"
-                onAction={() => {
-                  void refetchUsers();
-                }}
-                style={styles.inlineEmptyState}
-              />
-            ) : filteredUsers.length === 0 ? (
-              <EmptyState
-                icon="people-outline"
-                title="No people found"
-                message={userSearchQuery ? 'No users found matching your search.' : 'No users available yet.'}
-                actionLabel="Refresh"
-                onAction={() => {
-                  void refetchUsers();
-                }}
-                style={styles.inlineEmptyState}
-              />
-            ) : filteredUsers.map((profile, index) => (
-              <Animated.View
-                key={profile.uid}
-                entering={FadeInDown.delay(index * 80).springify()}
-              >
-                <TouchableOpacity
-                  style={[styles.userCard, Shadows.card]}
-                  onPress={() => router.push(`/users/${profile.uid}`)}
-                  activeOpacity={0.92}
-                >
-                  <View style={styles.userAccentBar} />
-                  <View style={styles.userPhotoContainer}>
-                    {profile.photoURL ? (
-                      <Image
-                        source={{ uri: profile.photoURL }}
-                        style={styles.userPhoto}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={styles.userPhotoPlaceholder}>
-                        <Text style={styles.userInitial}>
-                          {(profile.displayName || 'A').trim().charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.userOnlineDot} />
-                  </View>
-
-                  <View style={styles.userInfo}>
-                    <View style={styles.userHeader}>
-                      <View style={styles.userTitleBlock}>
-                        <Text style={styles.userName} numberOfLines={1}>
-                          {profile.displayName || 'Anonymous'}
-                        </Text>
-                        <View style={styles.userMetaRow}>
-                          {profile.verificationStatus === 'verified' ? (
-                            <View style={styles.verifiedPill}>
-                              <Ionicons name="shield-checkmark" size={12} color={Colors.success} />
-                              <Text style={styles.verifiedText}>Verified ID</Text>
-                            </View>
-                          ) : null}
-                          {profile.location ? (
-                            <View style={styles.userMetaPill}>
-                              <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
-                              <Text style={styles.userMetaText} numberOfLines={1}>{profile.location}</Text>
-                            </View>
-                          ) : null}
-                          <View style={styles.userMetaPill}>
-                            <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
-                            <Text style={styles.userMetaText}>{profile.ageRange}</Text>
-                          </View>
-                        </View>
-                      </View>
-                      <View style={styles.ratingContainer}>
-                        <Ionicons name="star" size={13} color={Colors.accent} />
-                        <Text style={styles.ratingText}>
-                          {profile.ratingCount > 0 ? profile.rating.toFixed(1) : 'New'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {profile.bio ? (
-                      <Text style={styles.userBio} numberOfLines={2}>
-                        {profile.bio}
-                      </Text>
-                    ) : null}
-
-                    {profile.interests.length > 0 ? (
-                      <View style={styles.interestsContainer}>
-                        {profile.interests.slice(0, 3).map((interest) => (
-                          <View key={interest} style={styles.interestTag}>
-                            <Text style={styles.interestText}>{interest}</Text>
-                          </View>
-                        ))}
-                        {profile.interests.length > 3 ? (
-                          <Text style={styles.moreInterests}>+{profile.interests.length - 3}</Text>
-                        ) : null}
-                      </View>
-                    ) : (
-                      <Text style={styles.userBio} numberOfLines={1}>
-                        No interests added yet
-                      </Text>
-                    )}
-
-                    <View style={styles.userFooter}>
-                      <View style={styles.joinedMiniStat}>
-                        <Ionicons name="calendar-outline" size={13} color={Colors.slate} />
-                        <Text style={styles.joinedMiniText}>
-                          {profile.activitiesJoined.length} joined
-                        </Text>
-                      </View>
-                      <View style={styles.viewProfilePill}>
-                        <Text style={styles.viewProfileText}>View profile</Text>
-                        <Ionicons name="chevron-forward" size={14} color={Colors.accent} />
-                      </View>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              </Animated.View>
-            ))}
-          </>
-        )}
-      </ScrollView>
+          {usersLoading ? (
+            <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+          ) : usersError && users.length === 0 ? (
+            <EmptyState
+              icon="alert-circle-outline"
+              title="Could not load people"
+              message={usersError}
+              actionLabel="Try again"
+              onAction={() => {
+                void refetchUsers();
+              }}
+              style={styles.inlineEmptyState}
+            />
+          ) : filteredUsers.length === 0 ? (
+            <EmptyState
+              icon="people-outline"
+              title="No people found"
+              message={userSearchQuery ? 'No users found matching your search.' : 'No users available yet.'}
+              actionLabel="Refresh"
+              onAction={() => {
+                void refetchUsers();
+              }}
+              style={styles.inlineEmptyState}
+            />
+          ) : (
+            <FlatList
+              style={styles.list}
+              data={filteredUsers}
+              keyExtractor={(item) => item.uid}
+              renderItem={renderUserItem}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.listContent}
+              initialNumToRender={6}
+              maxToRenderPerBatch={6}
+              windowSize={7}
+              removeClippedSubviews={Platform.OS === 'android'}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -710,7 +736,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
   },
-  content: {
+  listShell: {
+    flex: 1,
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
     paddingBottom: Spacing.xl * 2,
   },
   sectionTitle: {
