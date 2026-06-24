@@ -17,6 +17,7 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,7 +27,7 @@ import * as Location from 'expo-location';
 import { decode } from 'base64-arraybuffer';
 import { format } from 'date-fns';
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
-import { useChat } from '../../hooks/useChat';
+import { clearChatActivityUnread, useChat } from '../../hooks/useChat';
 import { useActivities } from '../../hooks/useActivities';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
@@ -39,12 +40,50 @@ type ChatPerson = {
   photoUrl: string;
 };
 
+const CHAT_READ_MARKER_PREFIX = 'chatReadMarker:v1:';
+
+function chatReadMarkerKey(userId: string, activityId: string) {
+  return `${CHAT_READ_MARKER_PREFIX}${userId}:${activityId}`;
+}
+
+async function loadChatReadMarker(userId: string, activityId: string): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(chatReadMarkerKey(userId, activityId));
+  } catch {
+    return null;
+  }
+}
+
+async function saveChatReadMarker(userId: string, activityId: string, value: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(chatReadMarkerKey(userId, activityId), value);
+  } catch {
+    // Best-effort local marker only.
+  }
+}
+
 type MessageRowProps = {
   message: Message;
   currentUserId?: string;
   hostId?: string;
   onDelete: (message: Message) => void;
 };
+
+type UnreadDividerProps = {
+  label: string;
+};
+
+const UnreadDivider = React.memo(function UnreadDivider({ label }: UnreadDividerProps) {
+  return (
+    <View style={styles.unreadDividerWrap}>
+      <View style={styles.unreadDividerLine} />
+      <View style={styles.unreadDividerPill}>
+        <Text style={styles.unreadDividerText}>{label}</Text>
+      </View>
+      <View style={styles.unreadDividerLine} />
+    </View>
+  );
+});
 
 const MessageRow = React.memo(function MessageRow({
   message,
@@ -207,10 +246,13 @@ export default function GroupChatScreen() {
   const [isInfoVisible, setIsInfoVisible] = useState(false);
   const [chatPeople, setChatPeople] = useState<ChatPerson[]>([]);
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null);
   const flatListRef = useRef<FlatList<Message>>(null);
   const shouldAutoScrollRef = useRef(false);
   const hasScrolledToInitialBottomRef = useRef(false);
+  const pendingInitialScrollRef = useRef(false);
   const isNearBottomRef = useRef(true);
+  const latestVisibleMessageAtRef = useRef<string>('');
 
   const activity = useMemo(
     () => activities.find((a) => a.id === id),
@@ -223,6 +265,7 @@ export default function GroupChatScreen() {
     [blockedUserIds, messages]
   );
   const latestVisibleMessageId = visibleMessages[visibleMessages.length - 1]?.id ?? '';
+  const latestVisibleMessageAt = visibleMessages[visibleMessages.length - 1]?.createdAt ?? '';
   const latestOtherParticipant = useMemo(
     () =>
       [...visibleMessages]
@@ -230,6 +273,50 @@ export default function GroupChatScreen() {
         .find((message) => message.senderId !== user?.uid && message.type !== 'system'),
     [user?.uid, visibleMessages]
   );
+  const unreadDividerIndex = useMemo(() => {
+    if (!lastReadAt) return -1;
+
+    const boundary = new Date(lastReadAt).getTime();
+    if (Number.isNaN(boundary)) return -1;
+
+    return visibleMessages.findIndex((message) => new Date(message.createdAt).getTime() > boundary);
+  }, [lastReadAt, visibleMessages]);
+
+  useEffect(() => {
+    latestVisibleMessageAtRef.current = latestVisibleMessageAt;
+  }, [latestVisibleMessageAt]);
+
+  useEffect(() => {
+    hasScrolledToInitialBottomRef.current = false;
+    pendingInitialScrollRef.current = true;
+    shouldAutoScrollRef.current = false;
+    isNearBottomRef.current = true;
+    setLastReadAt(null);
+  }, [id]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const hydrateReadMarker = async () => {
+      if (!user?.uid || !id) {
+        if (isActive) {
+          setLastReadAt(null);
+        }
+        return;
+      }
+
+      const marker = await loadChatReadMarker(user.uid, id);
+      if (isActive) {
+        setLastReadAt(marker);
+      }
+    };
+
+    void hydrateReadMarker();
+
+    return () => {
+      isActive = false;
+    };
+  }, [id, user?.uid]);
 
   useEffect(() => {
     let isActive = true;
@@ -311,18 +398,33 @@ export default function GroupChatScreen() {
     flatListRef.current?.scrollToEnd({ animated });
   }, []);
 
+  const scrollToIndexSafely = useCallback((index: number, animated: boolean) => {
+    if (index < 0) return;
+    flatListRef.current?.scrollToIndex({
+      index,
+      animated,
+      viewPosition: 0.15,
+    });
+  }, []);
+
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
     isNearBottomRef.current = distanceFromBottom <= 120;
   }, []);
 
-  useEffect(() => {
+  const handleContentSizeChange = useCallback(() => {
     if (!latestVisibleMessageId) return;
 
-    if (!hasScrolledToInitialBottomRef.current) {
-      scrollToBottom(false);
+    if (!hasScrolledToInitialBottomRef.current && pendingInitialScrollRef.current) {
+      const targetIndex = unreadDividerIndex >= 0 ? unreadDividerIndex : visibleMessages.length - 1;
+      if (targetIndex >= 0) {
+        scrollToIndexSafely(targetIndex, false);
+      } else {
+        scrollToBottom(false);
+      }
       hasScrolledToInitialBottomRef.current = true;
+      pendingInitialScrollRef.current = false;
       shouldAutoScrollRef.current = false;
       return;
     }
@@ -331,12 +433,50 @@ export default function GroupChatScreen() {
       scrollToBottom(true);
       shouldAutoScrollRef.current = false;
     }
-  }, [latestVisibleMessageId, scrollToBottom]);
+  }, [latestVisibleMessageId, scrollToBottom, scrollToIndexSafely, unreadDividerIndex, visibleMessages.length]);
+
+  useEffect(() => {
+    if (!latestVisibleMessageId) return;
+    if (hasScrolledToInitialBottomRef.current || !pendingInitialScrollRef.current) return;
+
+    const targetIndex = unreadDividerIndex >= 0 ? unreadDividerIndex : visibleMessages.length - 1;
+    if (targetIndex >= 0) {
+      scrollToIndexSafely(targetIndex, false);
+    } else {
+      scrollToBottom(false);
+    }
+
+    hasScrolledToInitialBottomRef.current = true;
+    pendingInitialScrollRef.current = false;
+    shouldAutoScrollRef.current = false;
+  }, [latestVisibleMessageId, scrollToBottom, scrollToIndexSafely, unreadDividerIndex, visibleMessages.length]);
+
+  const handleScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
+    const offset = Math.max(0, Math.floor(info.index * info.averageItemLength));
+    flatListRef.current?.scrollToOffset({ offset, animated: false });
+
+    requestAnimationFrame(() => {
+      flatListRef.current?.scrollToIndex({
+        index: info.index,
+        animated: false,
+        viewPosition: 0.15,
+      });
+    });
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
       void refetch();
-    }, [refetch])
+      if (user?.uid && id) {
+        void clearChatActivityUnread(user.uid, id);
+      }
+
+      return () => {
+        if (user?.uid && id && latestVisibleMessageAtRef.current) {
+          void saveChatReadMarker(user.uid, id, latestVisibleMessageAtRef.current);
+        }
+      };
+    }, [id, refetch, user?.uid])
   );
 
   const handleRefresh = useCallback(async () => {
@@ -571,15 +711,18 @@ export default function GroupChatScreen() {
   }, [deleteMessage, user?.uid]);
 
   const renderMessage = useCallback(
-    ({ item }: { item: Message }) => (
-      <MessageRow
-        message={item}
-        currentUserId={user?.uid}
-        hostId={activity?.hostId}
-        onDelete={handleDeleteMessage}
-      />
+    ({ item, index }: { item: Message; index: number }) => (
+      <View>
+        {index === unreadDividerIndex ? <UnreadDivider label="Unread messages" /> : null}
+        <MessageRow
+          message={item}
+          currentUserId={user?.uid}
+          hostId={activity?.hostId}
+          onDelete={handleDeleteMessage}
+        />
+      </View>
     ),
-    [activity?.hostId, handleDeleteMessage, user?.uid]
+    [activity?.hostId, handleDeleteMessage, unreadDividerIndex, user?.uid]
   );
 
   if (activity && !isChatAllowed) {
@@ -764,6 +907,8 @@ export default function GroupChatScreen() {
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
           onScroll={handleScroll}
+          onContentSizeChange={handleContentSizeChange}
+          onScrollToIndexFailed={handleScrollToIndexFailed}
           scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
@@ -1074,6 +1219,31 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     textAlign: 'center',
     lineHeight: 21,
+  },
+  unreadDividerWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginVertical: Spacing.sm,
+  },
+  unreadDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.divider,
+  },
+  unreadDividerPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+  },
+  unreadDividerText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 11,
+    color: Colors.slate,
+    letterSpacing: 0,
   },
   messagesList: {
     paddingHorizontal: Spacing.md,

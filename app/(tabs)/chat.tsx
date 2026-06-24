@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -19,7 +19,8 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { useAuthStore } from '../../store/authStore';
 import { getMockChatPreview } from '../../lib/mockChats';
 import { supabase } from '../../lib/supabase';
-import type { Activity, JoinRequestStatus } from '../../types';
+import { clearChatActivityUnread, loadUnreadChatActivityIds, saveUnreadChatActivityIds } from '../../hooks/useChat';
+import type { Activity, JoinRequestStatus, Message } from '../../types';
 
 type ChatActivityRowProps = {
   activity: Activity;
@@ -30,7 +31,28 @@ type ChatActivityRowProps = {
   onOpen: (activityId: string, hostId: string | undefined, effectiveStatus: JoinRequestStatus | null) => void;
   onDeleteRejected: (activityId: string) => Promise<boolean>;
   onDeleteHosted: (activityId: string) => void;
+  hasUnread: boolean;
+  recentMeta: RecentChatMeta | null;
+}
+
+type RecentChatMeta = {
+  lastMessageAt: string;
+  senderName: string;
+  previewText: string;
+  type: Message['type'];
 };
+
+function buildPreviewText(row: any): string {
+  if (row.type === 'location') return 'Shared location';
+  if (row.type === 'image') return 'Sent a photo';
+  if (row.type === 'system') return row.text ?? 'System message';
+  return row.text ?? '';
+}
+
+function normalizeSenderName(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
 
 const statusMeta = (status: JoinRequestStatus | null, isHost: boolean) => {
   if (isHost) {
@@ -57,6 +79,8 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
   onOpen,
   onDeleteRejected,
   onDeleteHosted,
+  hasUnread,
+  recentMeta,
 }: ChatActivityRowProps) {
   const chipColor = CategoryColors[activity.category] ?? Colors.accent;
   const preview = getMockChatPreview(activity.id);
@@ -65,6 +89,14 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
   const effectiveStatus: JoinRequestStatus | null =
     isHost ? null : status ?? (joinedIds.has(activity.id) ? 'approved' : null);
   const meta = statusMeta(effectiveStatus, isHost);
+  const previewText = recentMeta?.previewText
+    ? `${recentMeta.senderName}: ${recentMeta.previewText}`
+    : preview
+      ? `${preview.senderName}: ${preview.text}`
+      : `${activity.participants.length} participants`;
+  const timeText = recentMeta?.lastMessageAt
+    ? new Date(recentMeta.lastMessageAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : '';
 
   const handleOpen = useCallback(() => {
     onOpen(activity.id, activity.hostId, effectiveStatus);
@@ -101,14 +133,14 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
               {activity.title}
             </Text>
             <Text style={styles.chatSubtitle} numberOfLines={1}>
-              {meta.locked
-                ? meta.label
-                : preview
-                  ? `${preview.senderName}: ${preview.text}`
-                  : `${activity.participants.length} participants`}
+              {meta.locked ? meta.label : previewText}
             </Text>
-            <View style={[styles.statusPill, { backgroundColor: meta.color + '1A' }]}>
-              <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusPill, { backgroundColor: meta.color + '1A' }]}>
+                <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+              </View>
+              {hasUnread ? <View style={styles.unreadDot} /> : null}
+              {timeText ? <Text style={styles.timeText}>{timeText}</Text> : null}
             </View>
           </View>
         </TouchableOpacity>
@@ -171,6 +203,7 @@ function mapActivityRow(row: any): Activity {
 
 export default function ChatListScreen() {
   const router = useRouter();
+  const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const {
     activities,
@@ -185,8 +218,18 @@ export default function ChatListScreen() {
   } = useActivities();
   const user = useAuthStore((state) => state.user);
   const [supplementalActivities, setSupplementalActivities] = useState<Record<string, Activity>>({});
+  const [recentChatMeta, setRecentChatMeta] = useState<Record<string, RecentChatMeta>>({});
+  const [unreadChatIds, setUnreadChatIds] = useState<string[]>([]);
+  const unreadHydratedRef = useRef(false);
+  const listRef = useRef<FlatList<Activity>>(null);
   
   const joinedIds = useMemo(() => new Set(user?.activitiesJoined ?? []), [user?.activitiesJoined]);
+  const unreadChatIdSet = useMemo(() => new Set(unreadChatIds), [unreadChatIds]);
+  const activeChatId = useMemo(() => {
+    if (!pathname.startsWith('/chat/')) return null;
+    const maybeId = pathname.split('/')[2]?.trim();
+    return maybeId || null;
+  }, [pathname]);
 
   const chatActivityIds = useMemo(() => {
     const ids = new Set<string>();
@@ -199,6 +242,17 @@ export default function ChatListScreen() {
 
     return Array.from(ids);
   }, [activities, joinStatuses, joinedIds, user?.uid]);
+
+  const upsertRecentMeta = useCallback((activityId: string, meta: RecentChatMeta) => {
+    setRecentChatMeta((prev) => {
+      const current = prev[activityId];
+      if (current && current.lastMessageAt >= meta.lastMessageAt && current.previewText === meta.previewText) {
+        return prev;
+      }
+
+      return { ...prev, [activityId]: meta };
+    });
+  }, []);
 
   useEffect(() => {
     const missingIds = chatActivityIds.filter(
@@ -238,6 +292,174 @@ export default function ChatListScreen() {
     };
   }, [activities, chatActivityIds]);
 
+  useEffect(() => {
+    if (chatActivityIds.length === 0) {
+      setRecentChatMeta({});
+      return;
+    }
+
+    let isActive = true;
+
+    const fetchLatestMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages_full')
+        .select('activity_id, sender_id, sender_name, text, type, created_at')
+        .in('activity_id', chatActivityIds)
+        .order('created_at', { ascending: false });
+
+      if (error || !isActive) return;
+
+      const fallbackSenderIds = Array.from(
+        new Set(
+          (data ?? [])
+            .map((row: any) => row.sender_id)
+            .filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && normalizeSenderName((data ?? []).find((item: any) => item.sender_id === value)?.sender_name).length === 0)
+        )
+      );
+
+      let senderNameMap: Record<string, string> = {};
+
+      if (fallbackSenderIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', fallbackSenderIds);
+
+        senderNameMap = (profiles ?? []).reduce((acc: Record<string, string>, profile: any) => {
+          const displayName = normalizeSenderName(profile?.display_name);
+          if (profile?.id && displayName) {
+            acc[profile.id] = displayName;
+          }
+          return acc;
+        }, {});
+      }
+
+      const next: Record<string, RecentChatMeta> = {};
+      (data ?? []).forEach((row: any) => {
+        if (next[row.activity_id]) return;
+        const senderName =
+          normalizeSenderName(row.sender_name) ||
+          senderNameMap[row.sender_id] ||
+          'Someone';
+        next[row.activity_id] = {
+          lastMessageAt: row.created_at,
+          senderName,
+          previewText: buildPreviewText(row),
+          type: row.type,
+        };
+      });
+
+      if (isActive) {
+        setRecentChatMeta(next);
+      }
+    };
+
+    void fetchLatestMessages();
+
+    return () => {
+      isActive = false;
+    };
+  }, [chatActivityIds]);
+
+  useFocusEffect(
+    useCallback(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      void refetch();
+
+      let isActive = true;
+
+      const hydrateUnreadChats = async () => {
+        if (!user?.uid) {
+          if (isActive) {
+            setUnreadChatIds([]);
+            unreadHydratedRef.current = true;
+          }
+          return;
+        }
+
+        const ids = await loadUnreadChatActivityIds(user.uid);
+        if (isActive) {
+          setUnreadChatIds(ids);
+          unreadHydratedRef.current = true;
+        }
+      };
+
+      void hydrateUnreadChats();
+
+      return () => {
+        isActive = false;
+      };
+    }, [user?.uid])
+  );
+
+  useEffect(() => {
+    if (!user?.uid || !unreadHydratedRef.current) return;
+    void saveUnreadChatActivityIds(user.uid, unreadChatIds);
+  }, [unreadChatIds, user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || chatActivityIds.length === 0) return;
+
+    let isActive = true;
+    const channel = supabase.channel(`chat-list-unread:${user.uid}`);
+
+    chatActivityIds.forEach((activityId) => {
+      channel.on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `activity_id=eq.${activityId}`,
+        },
+        async (payload: any) => {
+          if (!isActive) return;
+          const isOwnMessage = payload?.new?.sender_id === user.uid;
+
+          const { data } = await supabase
+            .from('messages_full')
+            .select('activity_id, sender_id, sender_name, text, type, created_at')
+            .eq('id', payload?.new?.id)
+            .single();
+
+          if (!isActive || !data) return;
+
+          let senderName = normalizeSenderName(data.sender_name);
+          if (!senderName && data.sender_id) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('display_name')
+              .eq('id', data.sender_id)
+              .maybeSingle();
+
+            senderName = normalizeSenderName(profile?.display_name);
+          }
+
+          upsertRecentMeta(activityId, {
+            lastMessageAt: data.created_at,
+            senderName: senderName || 'Someone',
+            previewText: buildPreviewText(data),
+            type: data.type,
+          });
+
+          if (isOwnMessage) return;
+          if (activeChatId === activityId) return;
+
+          if (isActive) {
+            setUnreadChatIds((prev) => (prev.includes(activityId) ? prev : [...prev, activityId]));
+          }
+        }
+      );
+    });
+
+    void channel.subscribe();
+
+    return () => {
+      isActive = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [activeChatId, chatActivityIds, upsertRecentMeta, user?.uid]);
+
   const allChatActivities = useMemo(() => {
     const activityMap = new Map<string, Activity>();
 
@@ -262,12 +484,21 @@ export default function ChatListScreen() {
           const isHost = activity.hostId === user?.uid;
           return Boolean(status) || isHost || joinedIds.has(activity.id);
         })
-        .sort((left, right) => new Date(right.dateTime).getTime() - new Date(left.dateTime).getTime()),
-    [allChatActivities, getJoinStatus, joinedIds, user?.uid]
+        .sort((left, right) => {
+          const leftTime = recentChatMeta[left.id]?.lastMessageAt ?? left.dateTime;
+          const rightTime = recentChatMeta[right.id]?.lastMessageAt ?? right.dateTime;
+          return new Date(rightTime).getTime() - new Date(leftTime).getTime();
+        }),
+    [allChatActivities, getJoinStatus, joinedIds, recentChatMeta, user?.uid]
   );
 
   const openChatOrShowLock = useCallback((activityId: string, hostId: string | undefined, effectiveStatus: JoinRequestStatus | null) => {
     if (canAccessChat(activityId, hostId)) {
+      if (user?.uid) {
+        void clearChatActivityUnread(user.uid, activityId).then((next) => {
+          setUnreadChatIds(next);
+        });
+      }
       router.push(`/chat/${activityId}`);
       return;
     }
@@ -278,7 +509,7 @@ export default function ChatListScreen() {
         ? 'Your join request was not approved for this activity.'
         : 'Your join request is still pending approval.'
     );
-  }, [canAccessChat, router]);
+  }, [canAccessChat, router, user?.uid]);
 
   const removeFromSupplemental = useCallback((activityId: string) => {
     setSupplementalActivities((prev) => {
@@ -338,9 +569,11 @@ export default function ChatListScreen() {
         onOpen={openChatOrShowLock}
         onDeleteRejected={deleteRejectedJoin}
         onDeleteHosted={confirmHostedDelete}
+        hasUnread={unreadChatIdSet.has(item.id)}
+        recentMeta={recentChatMeta[item.id] ?? null}
       />
     ),
-    [confirmHostedDelete, deleteRejectedJoin, getJoinStatus, joinedIds, openChatOrShowLock, user?.uid]
+    [confirmHostedDelete, deleteRejectedJoin, getJoinStatus, joinedIds, openChatOrShowLock, recentChatMeta, unreadChatIdSet, user?.uid]
   );
 
   return (
@@ -369,8 +602,9 @@ export default function ChatListScreen() {
           title="No chats yet"
           message="Join an activity to start chatting with other participants."
         />
-      ) : (
+    ) : (
         <FlatList
+          ref={listRef}
           data={chatActivities}
           keyExtractor={(item) => item.id}
           renderItem={renderChatActivity}
@@ -445,11 +679,27 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.pill,
     paddingHorizontal: 8,
     paddingVertical: 3,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 6,
+  },
+  timeText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 11,
+    color: Colors.slate,
   },
   statusText: {
     fontFamily: Typography.bodyMed,
     fontSize: 11,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.error,
   },
   deleteBtn: {
     width: 36,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import type { Message } from '../types';
@@ -8,9 +8,50 @@ import { InputLimits, trimInput } from '../lib/validation';
 const chatSupabase = supabase as any;
 
 const MOCK_CHAT_STORAGE_PREFIX = 'mockChatMessages:v1:';
+const UNREAD_CHAT_STORAGE_PREFIX = 'chatUnreadActivityIds:v1:';
 
 function mockChatStorageKey(activityId: string) {
   return `${MOCK_CHAT_STORAGE_PREFIX}${activityId}`;
+}
+
+function unreadChatStorageKey(userId: string) {
+  return `${UNREAD_CHAT_STORAGE_PREFIX}${userId}`;
+}
+
+function normalizeUnreadActivityIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((value): value is string => typeof value === 'string');
+}
+
+export async function loadUnreadChatActivityIds(userId: string): Promise<string[]> {
+  try {
+    const raw = await AsyncStorage.getItem(unreadChatStorageKey(userId));
+    return raw ? normalizeUnreadActivityIds(JSON.parse(raw)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveUnreadChatActivityIds(userId: string, activityIds: string[]): Promise<void> {
+  try {
+    await AsyncStorage.setItem(unreadChatStorageKey(userId), JSON.stringify(activityIds));
+  } catch {
+    // Best-effort local persistence.
+  }
+}
+
+export async function markChatActivityUnread(userId: string, activityId: string): Promise<string[]> {
+  const current = await loadUnreadChatActivityIds(userId);
+  const next = Array.from(new Set([...current, activityId]));
+  await saveUnreadChatActivityIds(userId, next);
+  return next;
+}
+
+export async function clearChatActivityUnread(userId: string, activityId: string): Promise<string[]> {
+  const current = await loadUnreadChatActivityIds(userId);
+  const next = current.filter((id) => id !== activityId);
+  await saveUnreadChatActivityIds(userId, next);
+  return next;
 }
 
 function normalizePersistedMockMessage(raw: any, activityId: string): Message | null {
@@ -137,6 +178,7 @@ export function useChat(activityId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const isMockThread = activityId.startsWith('mock-');
+  const channelRef = useRef<any>(null);
 
   const fetchMessages = useCallback(async () => {
     setIsLoading(true);
@@ -215,10 +257,23 @@ export function useChat(activityId: string) {
           setMessages((prev) => prev.filter((message) => message.id !== payload.old.id));
         }
       )
+      .on(
+        'broadcast',
+        { event: 'message_deleted' },
+        (payload: any) => {
+          if (!isActive) return;
+          const deletedMessageId = payload?.payload?.messageId;
+          if (!deletedMessageId) return;
+          setMessages((prev) => prev.filter((message) => message.id !== deletedMessageId));
+        }
+      )
       .subscribe();
+
+    channelRef.current = channel;
 
     return () => {
       isActive = false;
+      channelRef.current = null;
       chatSupabase.removeChannel(channel);
     };
   }, [activityId, isMockThread]);
@@ -400,6 +455,12 @@ export function useChat(activityId: string) {
       if (!data) return false;
 
       setMessages((prev) => prev.filter((message) => message.id !== messageId));
+
+      void channelRef.current?.send?.({
+        type: 'broadcast',
+        event: 'message_deleted',
+        payload: { messageId, activityId },
+      });
       return true;
     },
     [activityId, isMockThread]
