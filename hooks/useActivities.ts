@@ -991,6 +991,27 @@ export function useActivities() {
     user,
   ]);
 
+  const completeHostedActivity = useCallback(async (activityId: string): Promise<boolean> => {
+    if (!user?.uid) return false;
+
+    try {
+      const currentActivity = activities.find((activity) => activity.id === activityId);
+      if (currentActivity && currentActivity.hostId !== user.uid) return false;
+
+      if (!isMockActivity(activityId)) {
+        await activityService.updateActivity(activityId, {
+          status: ActivityStatus.completed,
+        });
+      }
+
+      removeActivity(activityId);
+      return true;
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to complete hosted activity');
+      return false;
+    }
+  }, [activities, isMockActivity, removeActivity, user?.uid]);
+
   const getJoinStatus = useCallback(
     (activityId: string): JoinRequestStatus | null => joinStatuses[activityId] ?? null,
     [joinStatuses]
@@ -1026,6 +1047,7 @@ export function useActivities() {
     rejectJoinRequest,
     deleteHostedActivity,
     cancelHostedActivity,
+    completeHostedActivity,
     getJoinStatus,
     canAccessChat,
     getActivity,

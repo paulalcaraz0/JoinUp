@@ -128,6 +128,7 @@ export default function ManageActivityScreen() {
     error: activityError,
     leaveActivity,
     cancelHostedActivity,
+    completeHostedActivity,
     approveJoinRequest,
     rejectJoinRequest,
     refetch,
@@ -139,6 +140,7 @@ export default function ManageActivityScreen() {
   const [isLoadingRequests, setIsLoadingRequests] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
   const [isCancellingActivity, setIsCancellingActivity] = useState(false);
+  const [isCompletingActivity, setIsCompletingActivity] = useState(false);
 
   const activity = useMemo(
     () => activities.find((a) => a.id === id) ?? null,
@@ -529,6 +531,37 @@ export default function ManageActivityScreen() {
     );
   };
 
+  const handleCompleteActivity = () => {
+    if (!activity || activity.hostId !== user?.uid) return;
+
+    Alert.alert(
+      'Mark Completed',
+      'Mark this activity as completed? Participants will be able to rate each other afterward.',
+      [
+        { text: 'Keep Active', style: 'cancel' },
+        {
+          text: 'Mark Completed',
+          onPress: async () => {
+            setIsCompletingActivity(true);
+            try {
+              const completed = await completeHostedActivity(activity.id);
+              if (!completed) {
+                Alert.alert('Update failed', activityError ?? 'Could not complete this activity.');
+                return;
+              }
+
+              Alert.alert('Activity completed', 'Ratings are now available for participants.', [
+                { text: 'OK', onPress: () => router.back() },
+              ]);
+            } finally {
+              setIsCompletingActivity(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderParticipant = useCallback(
     ({ item, index }: { item: string; index: number }) => (
       <ParticipantRow
@@ -670,7 +703,18 @@ export default function ManageActivityScreen() {
             </>
           )}
 
-          {/* Cancel activity */}
+          {/* Complete or cancel activity */}
+          <TouchableOpacity
+            style={styles.completeBtn}
+            onPress={handleCompleteActivity}
+            disabled={isCompletingActivity}
+          >
+            <Ionicons name="checkmark-circle-outline" size={18} color={Colors.success} />
+            <Text style={styles.completeBtnText}>
+              {isCompletingActivity ? 'Completing...' : 'Mark Completed'}
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.cancelBtn}
             onPress={handleCancelActivity}
@@ -801,6 +845,23 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     marginTop: Spacing.sm,
     marginBottom: Spacing.xl,
+  },
+  completeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.success + '33',
+    borderRadius: BorderRadius.button,
+    paddingVertical: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  completeBtnText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 15,
+    color: Colors.success,
   },
   cancelBtnText: {
     fontFamily: Typography.bodyBold,

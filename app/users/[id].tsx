@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   ActivityIndicator,
   Image,
   ScrollView,
@@ -15,6 +16,9 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { format } from 'date-fns';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
+import { ratingService, type RateableActivity } from '../../lib/api/ratingService';
+import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { useAuthStore } from '../../store/authStore';
 import type { Activity, User } from '../../types';
 
 interface UserWithActivities extends User {
@@ -75,10 +79,17 @@ export default function UserProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  const currentUser = useAuthStore((state) => state.user);
 
   const [profile, setProfile] = useState<UserWithActivities | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rateableActivities, setRateableActivities] = useState<RateableActivity[]>([]);
+  const [viewerRatings, setViewerRatings] = useState<Record<string, number>>({});
+  const [selectedRatingActivityId, setSelectedRatingActivityId] = useState<string | null>(null);
+  const [draftScore, setDraftScore] = useState(0);
+  const [isLoadingRatingOptions, setIsLoadingRatingOptions] = useState(false);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   useEffect(() => {
     let isActive = true;
@@ -153,6 +164,54 @@ export default function UserProfileScreen() {
     };
   }, [id]);
 
+  useEffect(() => {
+    let isActive = true;
+
+    const loadRatingOptions = async () => {
+      if (!currentUser?.uid || !id || currentUser.uid === id) {
+        setRateableActivities([]);
+        setViewerRatings({});
+        setSelectedRatingActivityId(null);
+        setDraftScore(0);
+        return;
+      }
+
+      try {
+        setIsLoadingRatingOptions(true);
+
+        const [activities, ratings] = await Promise.all([
+          ratingService.listRateableActivities(currentUser.uid, id),
+          ratingService.getViewerRatings(currentUser.uid, id),
+        ]);
+
+        if (!isActive) return;
+
+        setRateableActivities(activities);
+        setViewerRatings(ratings);
+
+        const firstActivityId = activities.find((activity) => !ratings[activity.id])?.id ?? activities[0]?.id ?? null;
+        setSelectedRatingActivityId(firstActivityId);
+        setDraftScore(firstActivityId ? ratings[firstActivityId] ?? 0 : 0);
+      } catch {
+        if (!isActive) return;
+        setRateableActivities([]);
+        setViewerRatings({});
+        setSelectedRatingActivityId(null);
+        setDraftScore(0);
+      } finally {
+        if (isActive) {
+          setIsLoadingRatingOptions(false);
+        }
+      }
+    };
+
+    void loadRatingOptions();
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentUser?.uid, id]);
+
   if (isLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -177,6 +236,50 @@ export default function UserProfileScreen() {
   const joinedCount = profile.joinedActivities?.length ?? 0;
   const firstInitial = (profile.displayName || 'A').trim().charAt(0).toUpperCase();
   const memberSince = profile.createdAt ? format(new Date(profile.createdAt), 'MMM yyyy') : 'New member';
+  const selectedRatingActivity = rateableActivities.find((activity) => activity.id === selectedRatingActivityId) ?? null;
+  const existingRatingScore = selectedRatingActivityId ? viewerRatings[selectedRatingActivityId] ?? 0 : 0;
+  const hasRatedSelectedActivity = existingRatingScore > 0;
+  const unratedActivityCount = rateableActivities.filter((activity) => !viewerRatings[activity.id]).length;
+
+  const handleSelectRatingActivity = (activityId: string) => {
+    setSelectedRatingActivityId(activityId);
+    setDraftScore(viewerRatings[activityId] ?? 0);
+  };
+
+  const handleSubmitRating = async () => {
+    if (!id || !selectedRatingActivityId || draftScore < 1) return;
+
+    try {
+      setIsSubmittingRating(true);
+      const result = await ratingService.submitRating(selectedRatingActivityId, id, draftScore);
+
+      setViewerRatings((current) => ({
+        ...current,
+        [selectedRatingActivityId]: result.score,
+      }));
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              rating: result.rating,
+              ratingCount: result.ratingCount,
+            }
+          : current
+      );
+      Alert.alert('Rating saved', `You rated ${profile.displayName || 'this user'} ${result.score} stars.`);
+      const nextUnratedActivity = rateableActivities.find((activity) => (
+        activity.id !== selectedRatingActivityId && !viewerRatings[activity.id]
+      ));
+      if (nextUnratedActivity) {
+        setSelectedRatingActivityId(nextUnratedActivity.id);
+        setDraftScore(0);
+      }
+    } catch (err: any) {
+      Alert.alert('Rating failed', err?.message ?? 'Could not save your rating.');
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -288,6 +391,95 @@ export default function UserProfileScreen() {
             </View>
           </View>
         </Animated.View>
+
+        {isLoadingRatingOptions ? (
+          <View style={[styles.ratingPanel, Shadows.card]}>
+            <ActivityIndicator size="small" color={Colors.accent} />
+          </View>
+        ) : selectedRatingActivity ? (
+          <View style={[styles.ratingPanel, Shadows.card]}>
+            <View style={styles.ratingPanelHeader}>
+              <View>
+                <Text style={styles.ratingPanelTitle}>
+                  {hasRatedSelectedActivity ? 'You rated this activity' : 'Rate this user'}
+                </Text>
+                <Text style={styles.ratingPanelMeta} numberOfLines={1}>
+                  {selectedRatingActivity.title}
+                </Text>
+              </View>
+              {hasRatedSelectedActivity ? (
+                <View style={styles.savedRatingPill}>
+                  <Text style={styles.savedRatingText}>Rated</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {rateableActivities.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.ratingActivityList}
+              >
+                {rateableActivities.map((activity) => {
+                  const selected = activity.id === selectedRatingActivity.id;
+                  const rated = Boolean(viewerRatings[activity.id]);
+
+                  return (
+                    <TouchableOpacity
+                      key={activity.id}
+                      style={[styles.ratingActivityChip, selected && styles.ratingActivityChipSelected]}
+                      onPress={() => handleSelectRatingActivity(activity.id)}
+                    >
+                      <Text
+                        style={[styles.ratingActivityChipText, selected && styles.ratingActivityChipTextSelected]}
+                        numberOfLines={1}
+                      >
+                        {rated ? `${activity.title} - Rated` : activity.title}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+
+            <View style={styles.starPicker}>
+              {[1, 2, 3, 4, 5].map((score) => (
+                <TouchableOpacity
+                  key={score}
+                  onPress={() => {
+                    if (!hasRatedSelectedActivity) {
+                      setDraftScore(score);
+                    }
+                  }}
+                  style={styles.starButton}
+                  disabled={hasRatedSelectedActivity}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${score} star rating`}
+                >
+                  <Ionicons
+                    name={score <= (hasRatedSelectedActivity ? existingRatingScore : draftScore) ? 'star' : 'star-outline'}
+                    size={34}
+                    color={score <= (hasRatedSelectedActivity ? existingRatingScore : draftScore) ? Colors.accent : Colors.slate}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {hasRatedSelectedActivity ? (
+              <Text style={styles.ratingLockedText}>
+                This activity is already rated. {unratedActivityCount > 0 ? 'Select another completed activity to rate again.' : 'There are no other completed activities to rate.'}
+              </Text>
+            ) : (
+              <PrimaryButton
+                title="Submit Rating"
+                onPress={() => void handleSubmitRating()}
+                loading={isSubmittingRating}
+                disabled={draftScore < 1}
+                style={styles.submitRatingButton}
+              />
+            )}
+          </View>
+        ) : null}
 
         <ActivitySection
           title="Hosted Activities"
@@ -675,6 +867,93 @@ const styles = StyleSheet.create({
   section: {
     marginHorizontal: Spacing.lg,
     marginTop: Spacing.lg,
+  },
+  ratingPanel: {
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.lg,
+    padding: Spacing.md,
+  },
+  ratingPanelHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  ratingPanelTitle: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 17,
+    color: Colors.text,
+  },
+  ratingPanelMeta: {
+    fontFamily: Typography.body,
+    fontSize: 12,
+    color: Colors.slate,
+    marginTop: 2,
+    maxWidth: 230,
+  },
+  savedRatingPill: {
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.success + '12',
+    borderWidth: 1,
+    borderColor: Colors.success + '24',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  savedRatingText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 11,
+    color: Colors.success,
+  },
+  ratingActivityList: {
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+  },
+  ratingActivityChip: {
+    maxWidth: 180,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    backgroundColor: Colors.cream,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  ratingActivityChipSelected: {
+    borderColor: Colors.accent,
+    backgroundColor: Colors.accent + '12',
+  },
+  ratingActivityChipText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  ratingActivityChipTextSelected: {
+    color: Colors.accent,
+  },
+  starPicker: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+  },
+  starButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitRatingButton: {
+    minHeight: 48,
+    marginTop: Spacing.xs,
+  },
+  ratingLockedText: {
+    fontFamily: Typography.body,
+    fontSize: 13,
+    color: Colors.slate,
+    textAlign: 'center',
+    lineHeight: 18,
+    marginTop: Spacing.xs,
   },
   sectionHeadingRow: {
     flexDirection: 'row',

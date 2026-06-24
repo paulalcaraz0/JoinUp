@@ -7,6 +7,7 @@ export const DatabaseTables = {
   messages: 'messages',
   messagesFull: 'messages_full',
   reactions: 'reactions',
+  userRatings: 'user_ratings',
 } as const;
 
 export const ActivityStatus = {
