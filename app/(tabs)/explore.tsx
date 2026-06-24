@@ -292,7 +292,6 @@ export default function ExploreScreen() {
                 </Text>
               </View>
             )}
-            <View style={styles.userOnlineDot} />
           </View>
 
           <View style={styles.userInfo}>
@@ -954,17 +953,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.display,
     fontSize: 28,
     color: Colors.white,
-  },
-  userOnlineDot: {
-    position: 'absolute',
-    right: 4,
-    bottom: 4,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: Colors.success,
-    borderWidth: 2,
-    borderColor: Colors.white,
   },
   userInfo: {
     flex: 1,
