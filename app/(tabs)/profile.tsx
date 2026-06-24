@@ -89,6 +89,7 @@ export default function ProfileScreen() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
   const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
   const [authActionLoading, setAuthActionLoading] = useState<'switch' | 'logout' | 'delete' | null>(null);
   const [editName, setEditName] = useState(user?.displayName ?? '');
@@ -102,6 +103,10 @@ export default function ProfileScreen() {
     setEditLocation(user?.location ?? '');
     setEditBio(user?.bio ?? '');
   }, [user?.bio, user?.displayName, user?.location]);
+
+  useEffect(() => {
+    setPhotoLoadFailed(false);
+  }, [user?.photoURL]);
 
   const fetchHistory = useCallback(async () => {
     if (!user?.uid) return;
@@ -209,29 +214,41 @@ export default function ProfileScreen() {
     const uri = asset.uri;
     const extension = (uri.split('.').pop() ?? 'jpg').split('?')[0].toLowerCase();
     const path = `profile-photos/${user?.uid ?? 'anon'}-${Date.now()}.${extension}`;
+    const bucket = 'activity-images';
 
-    let uploadBody: Blob | File;
+    let uploadBody: Blob | File | ArrayBuffer;
+    let contentType = asset.mimeType || 'image/jpeg';
     if ((asset as any).file) {
       // Web returns a native File object; upload it directly to avoid fetch(uri) stalls.
       uploadBody = (asset as any).file as File;
+      contentType = uploadBody.type || contentType;
+    } else if (asset.base64) {
+      uploadBody = decode(asset.base64);
+      if (uploadBody.byteLength === 0) {
+        throw new Error('Selected image appears empty. Please pick a different photo.');
+      }
     } else {
       const response = await withTimeout(fetch(uri), 15000, 'Timed out while reading selected image.');
       uploadBody = await withTimeout(response.blob(), 15000, 'Timed out while preparing selected image.');
+      if ((uploadBody as Blob).size === 0) {
+        throw new Error('Selected image appears empty. Please pick a different photo.');
+      }
+      contentType = (uploadBody as Blob).type || contentType;
     }
 
     const { error: uploadError } = await withTimeout(
       supabase.storage
-        .from('chat-images')
+        .from(bucket)
         .upload(path, uploadBody, {
           upsert: false,
-          contentType: uploadBody.type || 'image/jpeg',
+          contentType,
         }),
       20000,
       'Timed out while uploading profile photo.'
     );
 
     if (uploadError) throw uploadError;
-    return supabase.storage.from('chat-images').getPublicUrl(path).data.publicUrl;
+    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
   }, [user?.uid]);
 
   const handleChangeProfilePhoto = useCallback(async () => {
@@ -251,6 +268,7 @@ export default function ProfileScreen() {
         mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.85,
+        base64: true,
       });
 
       if (result.canceled || !result.assets?.[0]?.uri) {
@@ -595,6 +613,7 @@ export default function ProfileScreen() {
 
   const verificationCopy = getVerificationCopy();
   const memberSince = user?.createdAt ? format(new Date(user.createdAt), 'MMM yyyy') : 'New member';
+  const avatarInitial = (user?.displayName || 'U').trim().charAt(0).toUpperCase();
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -624,10 +643,17 @@ export default function ProfileScreen() {
             disabled={isUploadingPhoto}
             activeOpacity={0.85}
           >
-            {user?.photoURL ? (
-              <Image source={{ uri: user.photoURL }} style={styles.avatarImage} resizeMode="cover" />
+            {user?.photoURL && !photoLoadFailed ? (
+              <Image
+                source={{ uri: user.photoURL }}
+                style={styles.avatarImage}
+                resizeMode="cover"
+                onError={() => setPhotoLoadFailed(true)}
+              />
             ) : (
-              <Ionicons name="person" size={40} color={Colors.white} />
+              <View style={styles.avatarFallback}>
+                <Text style={styles.avatarFallbackInitial}>{avatarInitial}</Text>
+              </View>
             )}
             <View style={styles.avatarCameraBadge}>
               {isUploadingPhoto ? (
@@ -1071,6 +1097,18 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: '100%',
     height: '100%',
+  },
+  avatarFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+  avatarFallbackInitial: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 30,
+    color: Colors.white,
   },
   avatarCameraBadge: {
     position: 'absolute',

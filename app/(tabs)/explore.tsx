@@ -307,22 +307,19 @@ export default function ExploreScreen() {
       )}
 
       {viewMode === 'events' ? (
-        <ScrollView
-          horizontal
-          style={styles.quickFilterScroll}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickFilterContainer}
-        >
+        <View style={styles.quickFilterRow}>
           {DiscoveryFilters.map((filter) => (
-            <CategoryChip
-              key={filter}
-              label={filter}
-              selected={selectedDiscoveryFilter === filter}
-              onPress={() => setSelectedDiscoveryFilter(filter)}
-              size="sm"
-            />
+            <View key={filter} style={styles.quickFilterCell}>
+              <CategoryChip
+                label={filter}
+                selected={selectedDiscoveryFilter === filter}
+                onPress={() => setSelectedDiscoveryFilter(filter)}
+                size="sm"
+                style={styles.discoveryFilterChip}
+              />
+            </View>
           ))}
-        </ScrollView>
+        </View>
       ) : null}
 
       <ScrollView
@@ -642,13 +639,21 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: Spacing.md,
   },
-  quickFilterScroll: {
-    maxHeight: 38,
+  quickFilterRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
   },
-  quickFilterContainer: {
-    paddingHorizontal: Spacing.lg,
-    alignItems: 'center',
+  quickFilterCell: {
+    flex: 1,
+  },
+  discoveryFilterChip: {
+    width: '100%',
+    marginRight: 0,
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   locationWrap: {
     position: 'relative',

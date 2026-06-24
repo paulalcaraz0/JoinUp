@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  Image,
   TextInput,
   FlatList,
   ActivityIndicator,
@@ -129,12 +130,24 @@ export default function HomeFeedScreen() {
   const [fadingActivityIds, setFadingActivityIds] = useState<string[]>([]);
   const [showGreetingCard, setShowGreetingCard] = useState(true);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const lastScrollYRef = useRef(0);
+  const showGreetingCardRef = useRef(true);
   const fadingActivityIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     fadingActivityIdsRef.current = fadingActivityIds;
   }, [fadingActivityIds]);
+
+  useEffect(() => {
+    showGreetingCardRef.current = showGreetingCard;
+  }, [showGreetingCard]);
+
+  useEffect(() => {
+    setAvatarLoadFailed(false);
+  }, [user?.photoURL]);
+
+  const avatarInitial = (user?.displayName || 'U').trim().charAt(0).toUpperCase();
 
   const filteredActivities = useMemo(() => {
     let filtered = activities;
@@ -226,12 +239,14 @@ export default function HomeFeedScreen() {
     const previousY = lastScrollYRef.current;
     const scrollingDown = currentY > previousY + 6;
     const scrollingUp = currentY < previousY - 8;
+    const shouldHideGreeting = currentY > 36 && scrollingDown;
+    const shouldShowGreeting = currentY < 18 && scrollingUp;
 
-    if (currentY > 36 && scrollingDown) {
+    if (shouldHideGreeting && showGreetingCardRef.current) {
       setShowGreetingCard(false);
     }
 
-    if (currentY < 18 || scrollingUp) {
+    if (shouldShowGreeting && !showGreetingCardRef.current) {
       setShowGreetingCard(true);
     }
 
@@ -291,9 +306,16 @@ export default function HomeFeedScreen() {
             <NotificationBadge count={unreadNotificationCount} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.avatar} onPress={() => router.push('/(tabs)/profile')}>
-            <Text style={styles.avatarInitial}>
-              {(user?.displayName || 'U').trim().charAt(0).toUpperCase()}
-            </Text>
+            {user?.photoURL && !avatarLoadFailed ? (
+              <Image
+                source={{ uri: user.photoURL }}
+                style={styles.avatarImage}
+                resizeMode="cover"
+                onError={() => setAvatarLoadFailed(true)}
+              />
+            ) : (
+              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -417,6 +439,10 @@ export default function HomeFeedScreen() {
             data={filteredActivities}
             keyExtractor={(item) => item.id}
             renderItem={renderActivity}
+            initialNumToRender={4}
+            maxToRenderPerBatch={4}
+            windowSize={5}
+            removeClippedSubviews
             contentContainerStyle={[
               styles.feedContent,
               { paddingBottom: insets.bottom + Spacing.xl * 2 },
@@ -485,6 +511,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarInitial: {
     fontFamily: Typography.bodyBold,

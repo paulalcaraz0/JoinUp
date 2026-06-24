@@ -56,6 +56,17 @@ const MessageRow = React.memo(function MessageRow({
     ? format(new Date(message.createdAt), 'h:mm a')
     : '';
   const canDelete = !isSystem && (message.senderId === currentUserId || hostId === currentUserId);
+  const senderInitial = (message.senderName || 'U').trim().charAt(0).toUpperCase();
+
+  const senderAvatar = !isMe ? (
+    message.senderPhoto ? (
+      <Image source={{ uri: message.senderPhoto }} style={styles.messageAvatar} resizeMode="cover" />
+    ) : (
+      <View style={styles.messageAvatarFallback}>
+        <Text style={styles.messageAvatarInitial}>{senderInitial}</Text>
+      </View>
+    )
+  ) : null;
 
   const handleDelete = useCallback(() => {
     if (canDelete) {
@@ -83,8 +94,13 @@ const MessageRow = React.memo(function MessageRow({
         ? `${message.location.lat.toFixed(4)}, ${message.location.lng.toFixed(4)}`
         : 'Shared location';
 
-    return (
-      <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
+    const locationBubble = (
+      <>
+        {!isMe ? (
+          <View style={styles.senderInfo}>
+            <Text style={styles.senderName}>{message.senderName}</Text>
+          </View>
+        ) : null}
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={handleOpenMap}
@@ -98,13 +114,27 @@ const MessageRow = React.memo(function MessageRow({
           <Text style={[styles.locationMetaText, isMe && styles.locationMetaTextSent]}>{locationLabel}</Text>
           <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
         </TouchableOpacity>
+      </>
+    );
+
+    return isMe ? (
+      <View style={[styles.bubbleRow, styles.bubbleRowRight]}>{locationBubble}</View>
+    ) : (
+      <View style={styles.receivedMessageRow}>
+        {senderAvatar}
+        <View style={styles.receivedBubbleWrap}>{locationBubble}</View>
       </View>
     );
   }
 
   if (message.type === 'image' && message.imageUrl) {
-    return (
-      <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
+    const imageBubble = (
+      <>
+        {!isMe ? (
+          <View style={styles.senderInfo}>
+            <Text style={styles.senderName}>{message.senderName}</Text>
+          </View>
+        ) : null}
         <TouchableOpacity
           activeOpacity={0.9}
           onLongPress={handleDelete}
@@ -113,27 +143,48 @@ const MessageRow = React.memo(function MessageRow({
           <Image source={{ uri: message.imageUrl }} style={styles.imageMessage} resizeMode="cover" />
           <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
         </TouchableOpacity>
+      </>
+    );
+
+    return isMe ? (
+      <View style={[styles.bubbleRow, styles.bubbleRowRight]}>{imageBubble}</View>
+    ) : (
+      <View style={styles.receivedMessageRow}>
+        {senderAvatar}
+        <View style={styles.receivedBubbleWrap}>{imageBubble}</View>
       </View>
     );
   }
 
-  return (
-    <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
-      {!isMe && (
-        <View style={styles.senderInfo}>
-          <Text style={styles.senderName}>{message.senderName}</Text>
-        </View>
-      )}
+  return isMe ? (
+    <View style={[styles.bubbleRow, styles.bubbleRowRight]}>
       <TouchableOpacity
         activeOpacity={0.9}
         onLongPress={handleDelete}
-        style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+        style={[styles.bubble, styles.bubbleSent]}
       >
-        <Text style={[styles.bubbleText, isMe && styles.bubbleTextSent]}>
+        <Text style={[styles.bubbleText, styles.bubbleTextSent]}>
           {message.text}
         </Text>
-        <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+        <Text style={[styles.timeText, styles.timeTextSent]}>{timeStr}</Text>
       </TouchableOpacity>
+    </View>
+  ) : (
+    <View style={styles.receivedMessageRow}>
+      {senderAvatar}
+      <View style={styles.receivedBubbleWrap}>
+        <View style={styles.senderInfo}>
+          <Text style={styles.senderName}>{message.senderName}</Text>
+        </View>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onLongPress={handleDelete}
+          style={[styles.bubble, styles.bubbleReceived]}
+        >
+          <Text style={styles.bubbleText}>{message.text}</Text>
+          <Text style={styles.timeText}>{timeStr}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 });
@@ -1027,6 +1078,37 @@ const styles = StyleSheet.create({
   },
   bubbleRowRight: {
     alignSelf: 'flex-end',
+  },
+  receivedMessageRow: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+    maxWidth: '86%',
+    marginBottom: Spacing.sm,
+  },
+  receivedBubbleWrap: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  messageAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.divider,
+  },
+  messageAvatarFallback: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+  messageAvatarInitial: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
   },
   senderInfo: {
     marginBottom: 2,

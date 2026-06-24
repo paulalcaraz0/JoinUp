@@ -43,6 +43,9 @@ export function CategoryChip({
           size === 'sm' ? styles.labelSm : styles.label,
           { color: selected ? Colors.white : Colors.text },
         ]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.85}
       >
         {label}
       </Text>
