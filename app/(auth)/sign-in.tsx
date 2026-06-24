@@ -22,7 +22,7 @@ import { useAuth } from '../../hooks/useAuth';
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signIn, signInWithGoogle, resetPassword, isLoading, error } = useAuth();
+  const { signIn, signInWithGoogle, resetPassword, isLoading, error } = useAuth({ initialize: false });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,8 +32,7 @@ export default function SignInScreen() {
     if (!email.trim() || !password.trim()) return;
     try {
       await signIn(email, password);
-      // signIn throws on error, so if we reach here it succeeded
-      // Router will be handled by auth state change in root layout
+      router.replace('/(tabs)');
     } catch (e) {
       // Error is already set in auth hook state, UI will show it
     }

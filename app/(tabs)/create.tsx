@@ -26,6 +26,7 @@ import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { CategoryChip } from '../../components/ui/CategoryChip';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
+import { InputLimits, trimInput } from '../../lib/validation';
 import { useActivities } from '../../hooks/useActivities';
 import type { Activity } from '../../types';
 import { format } from 'date-fns';
@@ -130,24 +131,36 @@ export default function CreateActivityScreen() {
   const validateForm = (): FormErrors => {
     const nextErrors: FormErrors = {};
 
-    if (title.trim().length === 0) {
+    const nextTitle = trimInput(title);
+    const nextDescription = trimInput(description);
+    const nextLocation = trimInput(locationName);
+
+    if (nextTitle.length === 0) {
       nextErrors.title = 'Title is required.';
+    } else if (nextTitle.length > InputLimits.activityTitle) {
+      nextErrors.title = `Keep the title under ${InputLimits.activityTitle} characters.`;
     }
 
-    if (description.trim().length === 0) {
+    if (nextDescription.length === 0) {
       nextErrors.description = 'Description is required.';
+    } else if (nextDescription.length > InputLimits.activityDescription) {
+      nextErrors.description = `Keep the description under ${InputLimits.activityDescription} characters.`;
     }
 
     if (!category) {
       nextErrors.category = 'Select a category.';
     }
 
-    if (locationName.trim().length === 0) {
+    if (nextLocation.length === 0) {
       nextErrors.location = 'Enter where this event will happen.';
+    } else if (nextLocation.length > InputLimits.activityLocation) {
+      nextErrors.location = `Keep the location under ${InputLimits.activityLocation} characters.`;
     }
 
     if (!Number.isInteger(parsedMaxSlots) || parsedMaxSlots <= 0) {
       nextErrors.maxSlots = 'Enter a valid participant count.';
+    } else if (parsedMaxSlots > InputLimits.maxActivitySlots) {
+      nextErrors.maxSlots = `Keep participant count at ${InputLimits.maxActivitySlots} or less.`;
     }
 
     return nextErrors;
@@ -390,10 +403,10 @@ export default function CreateActivityScreen() {
       }
 
       const insertPayload = {
-        title: title.trim(),
-        description: description.trim(),
+        title: trimInput(title),
+        description: trimInput(description),
         category,
-        location_name: locationName.trim(),
+        location_name: trimInput(locationName),
         location_lat: locationCoords?.lat ?? 0,
         location_lng: locationCoords?.lng ?? 0,
         date_time: date.toISOString(),
@@ -501,6 +514,7 @@ export default function CreateActivityScreen() {
               }
             }}
             error={errors.title}
+            maxLength={InputLimits.activityTitle}
           />
         </Animated.View>
 
@@ -519,6 +533,7 @@ export default function CreateActivityScreen() {
             numberOfLines={4}
             style={styles.textArea}
             error={errors.description}
+            maxLength={InputLimits.activityDescription}
           />
         </Animated.View>
 
@@ -558,6 +573,7 @@ export default function CreateActivityScreen() {
               }
             }}
             error={errors.location}
+            maxLength={InputLimits.activityLocation}
           />
           <TouchableOpacity
             style={styles.useLocationBtn}
@@ -607,6 +623,7 @@ export default function CreateActivityScreen() {
             }}
             keyboardType="number-pad"
             error={errors.maxSlots}
+            maxLength={String(InputLimits.maxActivitySlots).length}
           />
         </Animated.View>
 

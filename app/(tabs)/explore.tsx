@@ -17,6 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../../constants/theme';
 import { NavBar } from '../../components/layout/NavBar';
+import { CategoryChip } from '../../components/ui/CategoryChip';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { useActivities } from '../../hooks/useActivities';
 import { useLocation } from '../../hooks/useLocation';
 import { useUsers } from '../../hooks/useUsers';
@@ -42,16 +44,82 @@ const PHILIPPINE_PLACES: PlaceOption[] = [
 ];
 
 type ViewMode = 'events' | 'users';
+type DiscoveryFilter = 'All' | 'Today' | 'This Weekend' | 'Popular';
+
+const DiscoveryFilters: DiscoveryFilter[] = ['All', 'Today', 'This Weekend', 'Popular'];
+
+function isToday(dateTime: string, now: Date) {
+  const date = new Date(dateTime);
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+function isThisWeekend(dateTime: string, now: Date) {
+  const date = new Date(dateTime);
+  const today = now.getDay();
+  const saturday = new Date(now);
+  saturday.setHours(0, 0, 0, 0);
+
+  if (today === 0) {
+    saturday.setDate(now.getDate() - 1);
+  } else {
+    saturday.setDate(now.getDate() + ((6 - today + 7) % 7));
+  }
+
+  const sunday = new Date(saturday);
+  sunday.setDate(saturday.getDate() + 1);
+  sunday.setHours(23, 59, 59, 999);
+
+  return date >= saturday && date <= sunday;
+}
+
+function joinedCount(activity: any) {
+  return Math.max(0, activity.maxSlots - activity.currentSlots);
+}
+
+function applyDiscoveryFilter<T extends { dateTime: string; maxSlots: number; currentSlots: number }>(
+  items: T[],
+  filter: DiscoveryFilter,
+  now: Date
+) {
+  if (filter === 'Today') {
+    return items.filter((activity) => isToday(activity.dateTime, now));
+  }
+
+  if (filter === 'This Weekend') {
+    return items.filter((activity) => isThisWeekend(activity.dateTime, now));
+  }
+
+  if (filter === 'Popular') {
+    return [...items].sort((left, right) => joinedCount(right) - joinedCount(left));
+  }
+
+  return items;
+}
 
 export default function ExploreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { activities, isLoading: activitiesLoading } = useActivities();
-  const { users, isLoading: usersLoading } = useUsers();
+  const {
+    activities,
+    isLoading: activitiesLoading,
+    error: activitiesError,
+    refetch: refetchActivities,
+  } = useActivities();
+  const {
+    users,
+    isLoading: usersLoading,
+    error: usersError,
+    refetch: refetchUsers,
+  } = useUsers();
   const { location } = useLocation();
   const [viewMode, setViewMode] = useState<ViewMode>('events');
   const [showPlaceDropdown, setShowPlaceDropdown] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState('All Philippines');
+  const [selectedDiscoveryFilter, setSelectedDiscoveryFilter] = useState<DiscoveryFilter>('All');
   const [eventSearchQuery, setEventSearchQuery] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
 
@@ -82,18 +150,20 @@ export default function ExploreScreen() {
             return selectedPlaceOption.keywords.some((keyword) => haystack.includes(keyword));
           });
 
-    if (!eventSearchQuery.trim()) {
-      return byPlace;
+    let bySearch = byPlace;
+
+    if (eventSearchQuery.trim()) {
+      const query = eventSearchQuery.toLowerCase();
+      bySearch = byPlace.filter((activity) => {
+        const titleMatch = activity.title.toLowerCase().includes(query);
+        const locationMatch = activity.location.name.toLowerCase().includes(query);
+        const categoryMatch = activity.category.toLowerCase().includes(query);
+        return titleMatch || locationMatch || categoryMatch;
+      });
     }
 
-    const query = eventSearchQuery.toLowerCase();
-    return byPlace.filter((activity) => {
-      const titleMatch = activity.title.toLowerCase().includes(query);
-      const locationMatch = activity.location.name.toLowerCase().includes(query);
-      const categoryMatch = activity.category.toLowerCase().includes(query);
-      return titleMatch || locationMatch || categoryMatch;
-    });
-  }, [activities, eventSearchQuery, selectedPlaceOption]);
+    return applyDiscoveryFilter(bySearch, selectedDiscoveryFilter, new Date());
+  }, [activities, eventSearchQuery, selectedDiscoveryFilter, selectedPlaceOption]);
 
   const filteredUsers = useMemo(() => {
     if (!userSearchQuery.trim()) {
@@ -236,6 +306,25 @@ export default function ExploreScreen() {
         </View>
       )}
 
+      {viewMode === 'events' ? (
+        <ScrollView
+          horizontal
+          style={styles.quickFilterScroll}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickFilterContainer}
+        >
+          {DiscoveryFilters.map((filter) => (
+            <CategoryChip
+              key={filter}
+              label={filter}
+              selected={selectedDiscoveryFilter === filter}
+              onPress={() => setSelectedDiscoveryFilter(filter)}
+              size="sm"
+            />
+          ))}
+        </ScrollView>
+      ) : null}
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -246,10 +335,28 @@ export default function ExploreScreen() {
 
             {activitiesLoading ? (
               <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+            ) : activitiesError && activities.length === 0 ? (
+              <EmptyState
+                icon="alert-circle-outline"
+                title="Could not load activities"
+                message={activitiesError}
+                actionLabel="Try again"
+                onAction={() => {
+                  void refetchActivities();
+                }}
+                style={styles.inlineEmptyState}
+              />
             ) : filteredActivities.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {eventSearchQuery ? 'No activities found matching your search.' : 'No activities found for this place yet.'}
-              </Text>
+              <EmptyState
+                icon="calendar-outline"
+                title="No activities found"
+                message={eventSearchQuery ? 'No activities found matching your search.' : 'No activities found for this place yet.'}
+                actionLabel="Refresh"
+                onAction={() => {
+                  void refetchActivities();
+                }}
+                style={styles.inlineEmptyState}
+              />
             ) : filteredActivities.map((activity, index) => {
             const chipColor = CategoryColors[activity.category] ?? Colors.accent;
             const joined = activity.maxSlots - activity.currentSlots;
@@ -349,10 +456,28 @@ export default function ExploreScreen() {
 
             {usersLoading ? (
               <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+            ) : usersError && users.length === 0 ? (
+              <EmptyState
+                icon="alert-circle-outline"
+                title="Could not load people"
+                message={usersError}
+                actionLabel="Try again"
+                onAction={() => {
+                  void refetchUsers();
+                }}
+                style={styles.inlineEmptyState}
+              />
             ) : filteredUsers.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {userSearchQuery ? 'No users found matching your search.' : 'No users available yet.'}
-              </Text>
+              <EmptyState
+                icon="people-outline"
+                title="No people found"
+                message={userSearchQuery ? 'No users found matching your search.' : 'No users available yet.'}
+                actionLabel="Refresh"
+                onAction={() => {
+                  void refetchUsers();
+                }}
+                style={styles.inlineEmptyState}
+              />
             ) : filteredUsers.map((profile, index) => (
               <Animated.View
                 key={profile.uid}
@@ -388,6 +513,12 @@ export default function ExploreScreen() {
                           {profile.displayName || 'Anonymous'}
                         </Text>
                         <View style={styles.userMetaRow}>
+                          {profile.verificationStatus === 'verified' ? (
+                            <View style={styles.verifiedPill}>
+                              <Ionicons name="shield-checkmark" size={12} color={Colors.success} />
+                              <Text style={styles.verifiedText}>Verified ID</Text>
+                            </View>
+                          ) : null}
                           {profile.location ? (
                             <View style={styles.userMetaPill}>
                               <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
@@ -511,6 +642,14 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: Spacing.md,
   },
+  quickFilterScroll: {
+    maxHeight: 38,
+    marginBottom: Spacing.sm,
+  },
+  quickFilterContainer: {
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
+  },
   locationWrap: {
     position: 'relative',
     marginLeft: Spacing.lg,
@@ -632,6 +771,12 @@ const styles = StyleSheet.create({
   },
   loader: {
     marginTop: Spacing.xl * 2,
+  },
+  inlineEmptyState: {
+    flex: 0,
+    marginHorizontal: Spacing.lg,
+    marginTop: Spacing.md,
+    paddingVertical: Spacing.xl,
   },
   emptyText: {
     marginHorizontal: Spacing.lg,
@@ -819,6 +964,22 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.pill,
     paddingHorizontal: 7,
     paddingVertical: 3,
+  },
+  verifiedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.success + '12',
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.success + '24',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  verifiedText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 10,
+    color: Colors.success,
   },
   userMetaText: {
     fontFamily: Typography.bodyMed,

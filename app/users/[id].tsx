@@ -35,6 +35,7 @@ function mapUser(row: any): User {
     activitiesHosted: [],
     rating: Number(row.rating ?? 0),
     ratingCount: row.rating_count ?? 0,
+    verificationStatus: row.verification_status ?? 'unverified',
     createdAt: row.created_at ?? new Date().toISOString(),
   };
 }
@@ -83,7 +84,13 @@ export default function UserProfileScreen() {
     let isActive = true;
 
     const fetchUserProfile = async () => {
-      if (!id) return;
+      if (!id) {
+        if (isActive) {
+          setError('Missing user id.');
+          setIsLoading(false);
+        }
+        return;
+      }
 
       try {
         setIsLoading(true);
@@ -91,7 +98,7 @@ export default function UserProfileScreen() {
 
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('id, display_name, photo_url, bio, location, age_range, interests, activities_joined, rating, rating_count, created_at')
+          .select('id, display_name, photo_url, bio, location, age_range, interests, activities_joined, rating, rating_count, verification_status, created_at')
           .eq('id', id)
           .single();
 
@@ -195,6 +202,12 @@ export default function UserProfileScreen() {
 
             <Text style={styles.displayName}>{profile.displayName || 'Anonymous'}</Text>
             <View style={styles.profileMetaWrap}>
+              {profile.verificationStatus === 'verified' ? (
+                <View style={styles.verifiedPill}>
+                  <Ionicons name="shield-checkmark" size={13} color={Colors.success} />
+                  <Text style={styles.verifiedText}>Verified ID</Text>
+                </View>
+              ) : null}
               {profile.location ? (
                 <View style={styles.profileMetaPill}>
                   <Ionicons name="location-outline" size={13} color={Colors.textSecondary} />
@@ -519,6 +532,22 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.pill,
     paddingHorizontal: 10,
     paddingVertical: 5,
+  },
+  verifiedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.success + '12',
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.success + '24',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  verifiedText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 11,
+    color: Colors.success,
   },
   profileMetaText: {
     fontFamily: Typography.bodyMed,

@@ -16,12 +16,13 @@ interface ActivityCardProps {
   isLeaving?: boolean;
 }
 
-export function ActivityCard({ activity, onPress, onJoin, style, index = 0, isLeaving = false }: ActivityCardProps) {
+function ActivityCardComponent({ activity, onPress, onJoin, style, index = 0, isLeaving = false }: ActivityCardProps) {
   const slotsLeft = activity.currentSlots;
   const isFull = slotsLeft <= 0;
   const chipColor = CategoryColors[activity.category] ?? Colors.accent;
   const dateStr = activity.dateTime ? format(new Date(activity.dateTime), 'EEE, h:mm a') : '';
   const joined = activity.maxSlots - activity.currentSlots;
+  const hostInitial = (activity.hostName || 'H').trim().charAt(0).toUpperCase();
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
@@ -60,6 +61,28 @@ export function ActivityCard({ activity, onPress, onJoin, style, index = 0, isLe
           {activity.title}
         </Text>
 
+        <View style={styles.hostRow}>
+          {activity.hostPhoto ? (
+            <Image source={{ uri: activity.hostPhoto }} style={styles.hostPhoto} resizeMode="cover" />
+          ) : (
+            <View style={styles.hostPhotoFallback}>
+              <Text style={styles.hostInitial}>{hostInitial}</Text>
+            </View>
+          )}
+          <View style={styles.hostTextWrap}>
+            <Text style={styles.hostLabel}>Hosted by</Text>
+            <Text style={styles.hostName} numberOfLines={1}>
+              {activity.hostName || 'JoinUp host'}
+            </Text>
+          </View>
+          {activity.requiresApproval ? (
+            <View style={styles.approvalPill}>
+              <Ionicons name="shield-checkmark-outline" size={12} color={Colors.success} />
+              <Text style={styles.approvalText}>Approval</Text>
+            </View>
+          ) : null}
+        </View>
+
         <View style={styles.infoRow}>
           <Ionicons name="location-outline" size={14} color={Colors.slate} />
           <Text style={styles.infoText} numberOfLines={2}>
@@ -68,7 +91,15 @@ export function ActivityCard({ activity, onPress, onJoin, style, index = 0, isLe
         </View>
 
         <SlotProgressBar current={joined} max={activity.maxSlots} />
-        <Text style={styles.progressText}>{joined}/{activity.maxSlots} joined</Text>
+        <View style={styles.trustMetaRow}>
+          <Text style={styles.progressText}>{joined}/{activity.maxSlots} joined</Text>
+          <View style={styles.participantPill}>
+            <Ionicons name="people-outline" size={12} color={Colors.slate} />
+            <Text style={styles.participantText}>
+              {activity.participants.length} participant{activity.participants.length === 1 ? '' : 's'}
+            </Text>
+          </View>
+        </View>
 
         <TouchableOpacity
           style={[styles.joinBtn, isFull && styles.joinBtnDisabled]}
@@ -88,6 +119,8 @@ export function ActivityCard({ activity, onPress, onJoin, style, index = 0, isLe
     </Animated.View>
   );
 }
+
+export const ActivityCard = React.memo(ActivityCardComponent);
 
 const styles = StyleSheet.create({
   card: {
@@ -173,6 +206,60 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: Spacing.xs,
   },
+  hostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+  },
+  hostPhoto: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.mutedSurface,
+  },
+  hostPhotoFallback: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary + '14',
+  },
+  hostInitial: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.primary,
+  },
+  hostTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  hostLabel: {
+    fontFamily: Typography.body,
+    fontSize: 10,
+    color: Colors.slate,
+  },
+  hostName: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
+    color: Colors.text,
+  },
+  approvalPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.success + '12',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  approvalText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 10,
+    color: Colors.success,
+  },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -187,12 +274,29 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
+  trustMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+    marginTop: 6,
+    paddingHorizontal: Spacing.xs,
+  },
   progressText: {
     fontFamily: Typography.bodyMed,
     fontSize: 11,
     color: Colors.slate,
-    marginTop: 6,
-    paddingHorizontal: Spacing.xs,
+  },
+  participantPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    flexShrink: 1,
+  },
+  participantText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 11,
+    color: Colors.slate,
   },
   joinBtn: {
     backgroundColor: Colors.accent,

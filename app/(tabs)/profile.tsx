@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
+import { format } from 'date-fns';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../../constants/theme';
 import { CategoryChip } from '../../components/ui/CategoryChip';
 import { BottomSheet } from '../../components/ui/BottomSheet';
@@ -21,6 +23,7 @@ import { InputField } from '../../components/ui/InputField';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
+import { InputLimits, trimInput } from '../../lib/validation';
 import { signOutAndResetSession } from '../../hooks/useAuth';
 import { useActivities } from '../../hooks/useActivities';
 import type { JoinRequestStatus } from '../../types';
@@ -86,6 +89,7 @@ export default function ProfileScreen() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
   const [authActionLoading, setAuthActionLoading] = useState<'switch' | 'logout' | 'delete' | null>(null);
   const [editName, setEditName] = useState(user?.displayName ?? '');
   const [editLocation, setEditLocation] = useState(user?.location ?? '');
@@ -278,14 +282,142 @@ export default function ProfileScreen() {
     }
   }, [isUploadingPhoto, updateUser, uploadProfilePhoto, user?.uid]);
 
+  const getVerificationCopy = useCallback(() => {
+    switch (user?.verificationStatus) {
+      case 'verified':
+        return {
+          icon: 'shield-checkmark' as const,
+          title: 'ID verified',
+          body: 'Your profile has an added trust badge.',
+          action: 'Verified',
+          color: Colors.success,
+        };
+      case 'pending':
+        return {
+          icon: 'time-outline' as const,
+          title: 'Verification pending',
+          body: 'Your ID was submitted and is waiting for review.',
+          action: 'Pending',
+          color: Colors.warning,
+        };
+      case 'rejected':
+        return {
+          icon: 'alert-circle-outline' as const,
+          title: 'Verification needs review',
+          body: 'Your last submission was not approved. You can submit a clearer ID photo.',
+          action: 'Resubmit ID',
+          color: Colors.error,
+        };
+      default:
+        return {
+          icon: 'shield-outline' as const,
+          title: 'Verify your ID',
+          body: 'Submit a government ID to help people know your profile is real.',
+          action: 'Start',
+          color: Colors.accent,
+        };
+    }
+  }, [user?.verificationStatus]);
+
+  const handleSubmitIdVerification = useCallback(async () => {
+    if (!user?.uid || isSubmittingVerification) return;
+    if (user.verificationStatus === 'verified' || user.verificationStatus === 'pending') return;
+
+    Alert.alert(
+      'Submit ID for review?',
+      'Use a clear photo of your government ID. JoinUp stores this privately for manual review and only shows your verification status publicly.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Choose ID photo',
+          onPress: async () => {
+            try {
+              setIsSubmittingVerification(true);
+
+              const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!permission.granted) {
+                Alert.alert('Permission needed', 'Please allow photo access to upload your ID.');
+                return;
+              }
+
+              const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                quality: 0.9,
+                base64: true,
+              });
+
+              if (result.canceled || !result.assets?.[0]) return;
+
+              const asset = result.assets[0];
+              const extension = (asset.uri.split('.').pop() ?? 'jpg').split('?')[0].toLowerCase();
+              const safeExtension = ['jpg', 'jpeg', 'png', 'webp'].includes(extension) ? extension : 'jpg';
+              const documentPath = `${user.uid}/${Date.now()}.${safeExtension}`;
+
+              let uploadBody: Blob | ArrayBuffer;
+              if (asset.base64) {
+                uploadBody = decode(asset.base64);
+              } else {
+                const response = await withTimeout(fetch(asset.uri), 15000, 'Timed out while reading selected ID photo.');
+                uploadBody = await withTimeout(response.blob(), 15000, 'Timed out while preparing selected ID photo.');
+              }
+
+              const { error: uploadError } = await withTimeout(
+                supabase.storage
+                  .from('identity-verifications')
+                  .upload(documentPath, uploadBody, {
+                    upsert: false,
+                    contentType: asset.mimeType || 'image/jpeg',
+                  }),
+                25000,
+                'Timed out while uploading ID photo.'
+              );
+
+              if (uploadError) throw uploadError;
+
+              const { data, error } = await supabase.rpc('submit_identity_verification', {
+                p_document_path: documentPath,
+              });
+
+              if (error) throw error;
+              if (!data) throw new Error('Verification submission was not completed.');
+
+              updateUser({ verificationStatus: 'pending' });
+              Alert.alert('Submitted', 'Your ID was submitted for review.');
+            } catch (error: any) {
+              Alert.alert('Verification failed', error.message ?? 'Could not submit your ID right now.');
+            } finally {
+              setIsSubmittingVerification(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [isSubmittingVerification, updateUser, user?.uid, user?.verificationStatus]);
+
   const handleSaveProfile = useCallback(async () => {
     if (!user?.uid) return;
-    const nextName = editName.trim();
-    const nextLocation = editLocation.trim();
-    const nextBio = editBio.trim();
+    const nextName = trimInput(editName);
+    const nextLocation = trimInput(editLocation);
+    const nextBio = trimInput(editBio);
 
     if (!nextName) {
       Alert.alert('Missing name', 'Display name is required.');
+      return;
+    }
+
+    if (nextName.length > InputLimits.profileName) {
+      Alert.alert('Name too long', `Keep your display name under ${InputLimits.profileName} characters.`);
+      return;
+    }
+
+    if (nextLocation.length > InputLimits.profileLocation) {
+      Alert.alert('Location too long', `Keep your location under ${InputLimits.profileLocation} characters.`);
+      return;
+    }
+
+    if (nextBio.length > InputLimits.profileBio) {
+      Alert.alert('Bio too long', `Keep your bio under ${InputLimits.profileBio} characters.`);
       return;
     }
 
@@ -456,10 +588,13 @@ export default function ProfileScreen() {
     () => [
       { label: 'Joined', value: joinedActivities.length },
       { label: 'Hosted', value: hostedActivities.length },
-      { label: 'Rating', value: user?.rating?.toFixed(1) ?? '0.0' },
+      { label: 'Rating', value: user?.ratingCount ? user.rating.toFixed(1) : 'New' },
     ],
-    [hostedActivities.length, joinedActivities.length, user?.rating]
+    [hostedActivities.length, joinedActivities.length, user?.rating, user?.ratingCount]
   );
+
+  const verificationCopy = getVerificationCopy();
+  const memberSince = user?.createdAt ? format(new Date(user.createdAt), 'MMM yyyy') : 'New member';
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -506,12 +641,49 @@ export default function ProfileScreen() {
             {user?.displayName ?? 'User'}
           </Text>
           <Text style={styles.location}>{user?.location || 'No location set'}</Text>
+          <Text style={styles.memberSince}>Member since {memberSince}</Text>
+          <View style={[styles.verificationBadge, { backgroundColor: verificationCopy.color + '18' }]}>
+            <Ionicons name={verificationCopy.icon} size={14} color={verificationCopy.color} />
+            <Text style={[styles.verificationBadgeText, { color: verificationCopy.color }]}>
+              {verificationCopy.title}
+            </Text>
+          </View>
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() => setShowEditSheet(true)}
           >
             <Text style={styles.editBtnText}>Edit Profile</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <View style={[styles.verificationCard, Shadows.soft]}>
+            <View style={[styles.verificationIconWrap, { backgroundColor: verificationCopy.color + '16' }]}>
+              <Ionicons name={verificationCopy.icon} size={22} color={verificationCopy.color} />
+            </View>
+            <View style={styles.verificationTextWrap}>
+              <Text style={styles.verificationTitle}>{verificationCopy.title}</Text>
+              <Text style={styles.verificationBody}>{verificationCopy.body}</Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.verificationAction,
+                (user?.verificationStatus === 'verified' || user?.verificationStatus === 'pending') && styles.verificationActionDisabled,
+              ]}
+              onPress={handleSubmitIdVerification}
+              disabled={
+                isSubmittingVerification ||
+                user?.verificationStatus === 'verified' ||
+                user?.verificationStatus === 'pending'
+              }
+            >
+              {isSubmittingVerification ? (
+                <ActivityIndicator color={Colors.white} size="small" />
+              ) : (
+                <Text style={styles.verificationActionText}>{verificationCopy.action}</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Stats */}
@@ -685,12 +857,14 @@ export default function ProfileScreen() {
             value={editName}
             onChangeText={setEditName}
             placeholder="Your name"
+            maxLength={InputLimits.profileName}
           />
           <InputField
             label="Location"
             value={editLocation}
             onChangeText={setEditLocation}
             placeholder="City, Country"
+            maxLength={InputLimits.profileLocation}
           />
           <InputField
             label="Bio"
@@ -699,6 +873,7 @@ export default function ProfileScreen() {
             placeholder="About you"
             multiline
             numberOfLines={4}
+            maxLength={InputLimits.profileBio}
           />
           <PrimaryButton
             title="Save Changes"
@@ -921,6 +1096,25 @@ const styles = StyleSheet.create({
     color: Colors.slate,
     marginTop: 2,
   },
+  memberSince: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 3,
+  },
+  verificationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: BorderRadius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: Spacing.xs,
+  },
+  verificationBadgeText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+  },
   editBtn: {
     marginTop: Spacing.sm,
     borderWidth: 1.5,
@@ -959,6 +1153,56 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.lg,
+  },
+  verificationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.card,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: Spacing.md,
+  },
+  verificationIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verificationTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  verificationTitle: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 15,
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  verificationBody: {
+    fontFamily: Typography.body,
+    fontSize: 12,
+    color: Colors.slate,
+    lineHeight: 17,
+  },
+  verificationAction: {
+    minWidth: 76,
+    minHeight: 38,
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.md,
+  },
+  verificationActionDisabled: {
+    backgroundColor: Colors.slate,
+  },
+  verificationActionText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
   },
   sectionTitle: {
     fontFamily: Typography.bodyBold,

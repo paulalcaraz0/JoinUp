@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeOutUp, LinearTransition, SlideOutLeft } from 'react-native-reanimated';
@@ -18,21 +18,123 @@ import { Colors, Typography, Spacing, BorderRadius, Categories, Shadows } from '
 import { ActivityCard } from '../../components/ui/ActivityCard';
 import { CategoryChip } from '../../components/ui/CategoryChip';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { NotificationBadge } from '../../components/ui/NotificationBadge';
 import { useActivities } from '../../hooks/useActivities';
 import { useAuthStore } from '../../store/authStore';
+import { notificationService } from '../../lib/api/notificationService';
+import { supabase } from '../../lib/supabase';
+import type { Activity } from '../../types';
+
+type FeedActivityRowProps = {
+  activity: Activity;
+  index: number;
+  isLeaving: boolean;
+  userId?: string;
+  onOpen: (activityId: string) => void;
+  onJoin: (activityId: string, userId: string) => Promise<boolean>;
+};
+
+type DiscoveryFilter = 'All' | 'Today' | 'This Weekend' | 'Popular';
+
+const DiscoveryFilters: DiscoveryFilter[] = ['All', 'Today', 'This Weekend', 'Popular'];
+
+function isToday(dateTime: string, now: Date) {
+  const date = new Date(dateTime);
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
+function isThisWeekend(dateTime: string, now: Date) {
+  const date = new Date(dateTime);
+  const today = now.getDay();
+  const saturday = new Date(now);
+  saturday.setHours(0, 0, 0, 0);
+
+  if (today === 0) {
+    saturday.setDate(now.getDate() - 1);
+  } else {
+    saturday.setDate(now.getDate() + ((6 - today + 7) % 7));
+  }
+
+  const sunday = new Date(saturday);
+  sunday.setDate(saturday.getDate() + 1);
+  sunday.setHours(23, 59, 59, 999);
+
+  return date >= saturday && date <= sunday;
+}
+
+function joinedCount(activity: Activity) {
+  return Math.max(0, activity.maxSlots - activity.currentSlots);
+}
+
+function applyDiscoveryFilter(items: Activity[], filter: DiscoveryFilter, now: Date) {
+  if (filter === 'Today') {
+    return items.filter((activity) => isToday(activity.dateTime, now));
+  }
+
+  if (filter === 'This Weekend') {
+    return items.filter((activity) => isThisWeekend(activity.dateTime, now));
+  }
+
+  if (filter === 'Popular') {
+    return [...items].sort((left, right) => joinedCount(right) - joinedCount(left));
+  }
+
+  return items;
+}
+
+const FeedActivityRow = React.memo(function FeedActivityRow({
+  activity,
+  index,
+  isLeaving,
+  userId,
+  onOpen,
+  onJoin,
+}: FeedActivityRowProps) {
+  const handlePress = useCallback(() => {
+    onOpen(activity.id);
+  }, [activity.id, onOpen]);
+
+  const handleJoin = useCallback(async () => {
+    if (!userId || isLeaving) return;
+    await onJoin(activity.id, userId);
+  }, [activity.id, isLeaving, onJoin, userId]);
+
+  return (
+    <Animated.View exiting={SlideOutLeft.duration(220)}>
+      <ActivityCard
+        activity={activity}
+        index={index}
+        isLeaving={isLeaving}
+        onPress={handlePress}
+        onJoin={handleJoin}
+      />
+    </Animated.View>
+  );
+});
 
 export default function HomeFeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { activities, isLoading, joinActivity, joinedActivityIds, refetch } = useActivities();
+  const { activities, isLoading, error, joinActivity, joinedActivityIds, refetch } = useActivities();
   const user = useAuthStore((s) => s.user);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedDiscoveryFilter, setSelectedDiscoveryFilter] = useState<DiscoveryFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [fadingActivityIds, setFadingActivityIds] = useState<string[]>([]);
   const [showGreetingCard, setShowGreetingCard] = useState(true);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const lastScrollYRef = useRef(0);
+  const fadingActivityIdsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    fadingActivityIdsRef.current = fadingActivityIds;
+  }, [fadingActivityIds]);
 
   const filteredActivities = useMemo(() => {
     let filtered = activities;
@@ -44,7 +146,8 @@ export default function HomeFeedScreen() {
       filtered = filtered.filter(
         (a) =>
           a.title.toLowerCase().includes(q) ||
-          a.location.name.toLowerCase().includes(q)
+          a.location.name.toLowerCase().includes(q) ||
+          a.category.toLowerCase().includes(q)
       );
     }
 
@@ -55,8 +158,55 @@ export default function HomeFeedScreen() {
       );
     }
 
-    return filtered;
-  }, [activities, fadingActivityIds, joinedActivityIds, searchQuery, selectedCategory]);
+    return applyDiscoveryFilter(filtered, selectedDiscoveryFilter, new Date());
+  }, [activities, fadingActivityIds, joinedActivityIds, searchQuery, selectedCategory, selectedDiscoveryFilter]);
+
+  const fetchUnreadNotificationCount = useCallback(async () => {
+    if (!user?.uid) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+
+    try {
+      setUnreadNotificationCount(await notificationService.countUnreadForUser(user.uid));
+    } catch {
+      // Badge count is best-effort; avoid blocking the feed on notification errors.
+    }
+  }, [user?.uid]);
+
+  useEffect(() => {
+    void fetchUnreadNotificationCount();
+  }, [fetchUnreadNotificationCount]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchUnreadNotificationCount();
+    }, [fetchUnreadNotificationCount])
+  );
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const channel = supabase
+      .channel(`home-notifications:${user.uid}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.uid}`,
+        },
+        () => {
+          void fetchUnreadNotificationCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [fetchUnreadNotificationCount, user?.uid]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -65,13 +215,13 @@ export default function HomeFeedScreen() {
     return 'Good evening';
   };
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refetch();
     setRefreshing(false);
-  };
+  }, [refetch]);
 
-  const handleFeedScroll = (event: any) => {
+  const handleFeedScroll = useCallback((event: any) => {
     const currentY = event.nativeEvent.contentOffset.y;
     const previousY = lastScrollYRef.current;
     const scrollingDown = currentY > previousY + 6;
@@ -86,7 +236,43 @@ export default function HomeFeedScreen() {
     }
 
     lastScrollYRef.current = Math.max(0, currentY);
-  };
+  }, []);
+
+  const handleOpenActivity = useCallback((activityId: string) => {
+    router.push(`/activity/${activityId}`);
+  }, [router]);
+
+  const handleJoinActivity = useCallback(async (activityId: string, userId: string) => {
+    if (fadingActivityIdsRef.current.includes(activityId)) return false;
+
+    setFadingActivityIds((prev) => [...prev, activityId]);
+    const joined = await joinActivity(activityId, userId);
+
+    if (!joined) {
+      setFadingActivityIds((prev) => prev.filter((id) => id !== activityId));
+      return false;
+    }
+
+    setTimeout(() => {
+      setFadingActivityIds((prev) => prev.filter((id) => id !== activityId));
+    }, 220);
+
+    return true;
+  }, [joinActivity]);
+
+  const renderActivity = useCallback(
+    ({ item, index }: { item: Activity; index: number }) => (
+      <FeedActivityRow
+        activity={item}
+        index={index}
+        isLeaving={fadingActivityIds.includes(item.id)}
+        userId={user?.uid}
+        onOpen={handleOpenActivity}
+        onJoin={handleJoinActivity}
+      />
+    ),
+    [fadingActivityIds, handleJoinActivity, handleOpenActivity, user?.uid]
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -102,6 +288,7 @@ export default function HomeFeedScreen() {
             onPress={() => router.push('/notifications')}
           >
             <Ionicons name="notifications-outline" size={24} color={Colors.primary} />
+            <NotificationBadge count={unreadNotificationCount} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.avatar} onPress={() => router.push('/(tabs)/profile')}>
             <Text style={styles.avatarInitial}>
@@ -181,48 +368,55 @@ export default function HomeFeedScreen() {
         />
       </View>
 
+      <ScrollView
+        horizontal
+        style={styles.quickFilterScroll}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.quickFilterContainer}
+      >
+        {DiscoveryFilters.map((filter) => (
+          <CategoryChip
+            key={filter}
+            label={filter}
+            selected={selectedDiscoveryFilter === filter}
+            onPress={() => setSelectedDiscoveryFilter(filter)}
+            size="sm"
+          />
+        ))}
+      </ScrollView>
+
       {/* Activity Feed */}
       <View style={styles.feedContainer}>
         {isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.accent} />
           </View>
+        ) : error && activities.length === 0 ? (
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Could not load activities"
+            message={error}
+            actionLabel="Try again"
+            onAction={() => {
+              void refetch();
+            }}
+          />
         ) : filteredActivities.length === 0 ? (
           <EmptyState
             icon="calendar-outline"
             title="No activities found"
             message="Try changing your filters or check back later for new activities."
+            actionLabel="Refresh"
+            onAction={() => {
+              void refetch();
+            }}
           />
         ) : (
           <FlatList
             style={styles.feedList}
             data={filteredActivities}
             keyExtractor={(item) => item.id}
-            renderItem={({ item, index }) => (
-              <Animated.View exiting={SlideOutLeft.duration(220)}>
-                <ActivityCard
-                  activity={item}
-                  index={index}
-                  isLeaving={fadingActivityIds.includes(item.id)}
-                  onPress={() => router.push(`/activity/${item.id}`)}
-                  onJoin={async () => {
-                    if (!user?.uid || fadingActivityIds.includes(item.id)) return;
-
-                    setFadingActivityIds((prev) => [...prev, item.id]);
-                    const joined = await joinActivity(item.id, user.uid);
-
-                    if (!joined) {
-                      setFadingActivityIds((prev) => prev.filter((activityId) => activityId !== item.id));
-                      return;
-                    }
-
-                    setTimeout(() => {
-                      setFadingActivityIds((prev) => prev.filter((activityId) => activityId !== item.id));
-                    }, 220);
-                  }}
-                />
-              </Animated.View>
-            )}
+            renderItem={renderActivity}
             contentContainerStyle={[
               styles.feedContent,
               { paddingBottom: insets.bottom + Spacing.xl * 2 },
@@ -277,6 +471,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.white,
@@ -387,6 +582,14 @@ const styles = StyleSheet.create({
     color: Colors.text,
     marginLeft: Spacing.sm,
     paddingVertical: 0,
+  },
+  quickFilterScroll: {
+    maxHeight: 38,
+    marginBottom: Spacing.sm,
+  },
+  quickFilterContainer: {
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
   },
   loadingContainer: {
     flex: 1,

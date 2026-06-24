@@ -5,65 +5,13 @@ import type { Activity, JoinRequestStatus } from '../types';
 import { MOCK_ACTIVITIES } from '../lib/mockActivities';
 import { useActivityStore } from '../store/activityStore';
 import { useAuthStore } from '../store/authStore';
+import { DatabaseTables, ParticipantStatus, ActivityStatus, NotificationTypes, ActivityCategories } from '../lib/constants/database';
+import { mapActivity, normalizeImageUrl } from '../lib/mappers/activity';
+import { mapNotification } from '../lib/mappers/notification';
+import { activityService } from '../lib/api/activityService';
+import { notificationService } from '../lib/api/notificationService';
 
-function normalizeImageUrl(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined;
-
-  const raw = value.trim();
-  if (!raw) return undefined;
-
-  // Keep valid absolute URLs exactly as-is (including query tokens for signed URLs).
-  if (raw.startsWith('https://') || raw.startsWith('http://')) {
-    return raw;
-  }
-
-  // Salvage legacy malformed URLs such as "...jpg.blob:http://..." by keeping the first valid image URL.
-  const extracted = raw.match(/https?:\/\/[^\s]+?\.(jpg|jpeg|png|webp|heic|heif)(?:\?[^\s]*)?/i);
-  if (extracted?.[0]) {
-    return extracted[0];
-  }
-
-  return undefined;
-}
-
-function mapActivity(row: any): Activity {
-  const normalizedImages = Array.isArray(row.images)
-    ? row.images
-        .map((value: unknown) => normalizeImageUrl(value))
-        .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0)
-    : [];
-
-  const normalizedCoverImage = normalizeImageUrl(row.cover_image) ?? normalizedImages[0];
-
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    category: row.category,
-    location: {
-      name: row.location_name,
-      lat: row.location_lat,
-      lng: row.location_lng,
-    },
-    dateTime: row.date_time,
-    maxSlots: row.max_slots,
-    currentSlots: row.current_slots ?? row.max_slots,
-    participants: row.participant_ids ?? [],
-    hostId: row.host_id,
-    hostName: row.host_name ?? '',
-    hostPhoto: row.host_photo ?? '',
-    coverImage: normalizedCoverImage,
-    images: normalizedImages.length > 0 ? normalizedImages : undefined,
-    requiresApproval: row.requires_approval,
-    reactions: {
-      fire: row.reaction_fire ?? 0,
-      heart: row.reaction_heart ?? 0,
-      like: row.reaction_like ?? 0,
-    },
-    status: row.status,
-    createdAt: row.created_at,
-  };
-}
+export type { ActivityStatus, ParticipantStatus, NotificationTypes } from '../lib/constants/database';
 
 function isMissingImagesColumnError(error: unknown): boolean {
   const joined = [
@@ -675,9 +623,9 @@ export function useActivities() {
           // The approval/rejection only affects the local joinStatuses state. On page reload,
           // the activity will be found in profile.activitiesJoined and its status will be
           // restored from joinStatuses (which uses mock approval = 'approved' logic).
-          await supabase.from('notifications').insert({
+          await supabase.from(DatabaseTables.notifications).insert({
             user_id: userId,
-            type: 'approval',
+            type: NotificationTypes.approval,
             title: resolvedStatus === 'approved' ? 'Join request approved' : 'Join request not approved',
             body:
               resolvedStatus === 'approved'
@@ -712,11 +660,11 @@ export function useActivities() {
         const requiresApproval = currentActivity.requiresApproval;
         const decisionDueAt = requiresApproval ? null : new Date(Date.now() + delayRangeMs()).toISOString();
         const { error: joinError } = await supabase
-          .from('participants')
+          .from(DatabaseTables.participants)
           .insert({
             activity_id: activityId,
             user_id: userId,
-            status: 'pending',
+            status: ParticipantStatus.pending,
             decision_due_at: decisionDueAt,
             resolved_at: null,
           });
@@ -728,11 +676,11 @@ export function useActivities() {
 
           // Legacy schema fallback
           const { error: fallbackError } = await supabase
-            .from('participants')
+            .from(DatabaseTables.participants)
             .insert({
               activity_id: activityId,
               user_id: userId,
-              status: currentActivity.requiresApproval ? 'pending' : 'joined',
+              status: currentActivity.requiresApproval ? ParticipantStatus.pending : ParticipantStatus.joined,
             });
 
           if (fallbackError) throw fallbackError;

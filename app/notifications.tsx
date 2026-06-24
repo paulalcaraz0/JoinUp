@@ -15,8 +15,11 @@ import { Colors, Typography, Spacing } from '../constants/theme';
 import { ScreenWrapper } from '../components/layout/ScreenWrapper';
 import { NavBar } from '../components/layout/NavBar';
 import { EmptyState } from '../components/ui/EmptyState';
+import type { ListRenderItemInfo } from 'react-native';
 import type { Notification } from '../types';
 import { supabase } from '../lib/supabase';
+import { mapNotification } from '../lib/mappers/notification';
+import { notificationService } from '../lib/api/notificationService';
 import { useAuthStore } from '../store/authStore';
 
 const ICON_MAP: Record<string, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
@@ -27,40 +30,69 @@ const ICON_MAP: Record<string, { name: keyof typeof Ionicons.glyphMap; color: st
   approval: { name: 'shield-checkmark', color: Colors.warning },
 };
 
-function mapNotification(row: any): Notification {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    type: row.type,
-    title: row.title,
-    body: row.body,
-    activityId: row.activity_id ?? null,
-    read: Boolean(row.read),
-    createdAt: row.created_at,
-  };
-}
+type NotificationRowProps = {
+  item: Notification;
+  index: number;
+  onPress: (notification: Notification) => void;
+};
+
+const NotificationRow = React.memo(function NotificationRow({
+  item,
+  index,
+  onPress,
+}: NotificationRowProps) {
+  const icon = ICON_MAP[item.type] ?? { name: 'notifications' as keyof typeof Ionicons.glyphMap, color: Colors.slate };
+  const timeAgo = item.createdAt
+    ? formatDistanceToNow(parseISO(item.createdAt), { addSuffix: true })
+    : '';
+
+  const handlePress = useCallback(() => {
+    onPress(item);
+  }, [item, onPress]);
+
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 60).springify()}>
+      <TouchableOpacity
+        style={[styles.notifRow, !item.read && styles.notifRowUnread]}
+        onPress={handlePress}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconCircle, { backgroundColor: icon.color + '18' }]}>
+          <Ionicons name={icon.name} size={20} color={icon.color} />
+        </View>
+        <View style={styles.notifContent}>
+          <Text style={styles.notifTitle}>{item.title}</Text>
+          <Text style={styles.notifBody} numberOfLines={2}>
+            {item.body}
+          </Text>
+          <Text style={styles.notifTime}>{timeAgo}</Text>
+        </View>
+        {!item.read && <View style={styles.unreadDot} />}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
 
 export default function NotificationsScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.uid) {
       setNotifications([]);
+      setError(null);
       setIsLoading(false);
       return;
     }
 
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.uid)
-      .order('created_at', { ascending: false });
-
-    if (!error) {
-      setNotifications((data ?? []).map(mapNotification));
+    try {
+      setError(null);
+      setNotifications(await notificationService.listForUser(user.uid));
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to load notifications.');
     }
 
     setIsLoading(false);
@@ -125,64 +157,39 @@ export default function NotificationsScreen() {
     [notifications]
   );
 
-  const handleMarkAllRead = () => {
+  const handleMarkAllRead = useCallback(() => {
     if (!user?.uid || notifications.length === 0) return;
 
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    void supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('user_id', user.uid)
-      .eq('read', false);
-  };
+    void notificationService.markAllRead(user.uid);
+  }, [notifications.length, user?.uid]);
 
-  const handleNotificationPress = (notif: Notification) => {
-    // Mark as read
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
-    );
-    void supabase.from('notifications').update({ read: true }).eq('id', notif.id);
+  const handleNotificationPress = useCallback(async (notif: Notification) => {
+    if (!notif.read) {
+      try {
+        await notificationService.markRead(notif.id);
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n))
+        );
+      } catch {
+        // Keep existing navigation behavior even if the read write fails.
+      }
+    }
 
     // Navigate to activity
     if (notif.activityId) {
       router.push(`/activity/${notif.activityId}`);
     }
-  };
+  }, [router]);
 
-  const renderNotification = ({
-    item,
-    index,
-  }: {
-    item: Notification;
-    index: number;
-  }) => {
-    const icon = ICON_MAP[item.type] ?? { name: 'notifications' as keyof typeof Ionicons.glyphMap, color: Colors.slate };
-    const timeAgo = item.createdAt
-      ? formatDistanceToNow(parseISO(item.createdAt), { addSuffix: true })
-      : '';
+  const renderNotification = useCallback(
+    ({ item, index }: ListRenderItemInfo<Notification>) => (
+      <NotificationRow item={item} index={index} onPress={handleNotificationPress} />
+    ),
+    [handleNotificationPress]
+  );
 
-    return (
-      <Animated.View entering={FadeInDown.delay(index * 60).springify()}>
-        <TouchableOpacity
-          style={[styles.notifRow, !item.read && styles.notifRowUnread]}
-          onPress={() => handleNotificationPress(item)}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.iconCircle, { backgroundColor: icon.color + '18' }]}>
-            <Ionicons name={icon.name} size={20} color={icon.color} />
-          </View>
-          <View style={styles.notifContent}>
-            <Text style={styles.notifTitle}>{item.title}</Text>
-            <Text style={styles.notifBody} numberOfLines={2}>
-              {item.body}
-            </Text>
-            <Text style={styles.notifTime}>{timeAgo}</Text>
-          </View>
-          {!item.read && <View style={styles.unreadDot} />}
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  };
+  const renderSeparator = useCallback(() => <View style={styles.separator} />, []);
 
   return (
     <ScreenWrapper>
@@ -202,11 +209,27 @@ export default function NotificationsScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={Colors.accent} />
         </View>
+      ) : error && notifications.length === 0 ? (
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Could not load notifications"
+          message={error}
+          actionLabel="Try again"
+          onAction={() => {
+            setIsLoading(true);
+            void fetchNotifications();
+          }}
+        />
       ) : notifications.length === 0 ? (
         <EmptyState
           icon="notifications-off-outline"
           title="No notifications"
           message="You're all caught up! Check back later."
+          actionLabel="Refresh"
+          onAction={() => {
+            setIsLoading(true);
+            void fetchNotifications();
+          }}
         />
       ) : (
         <FlatList
@@ -215,7 +238,7 @@ export default function NotificationsScreen() {
           renderItem={renderNotification}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={renderSeparator}
         />
       )}
     </ScreenWrapper>

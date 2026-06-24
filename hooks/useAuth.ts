@@ -162,6 +162,7 @@ function mapProfile(id: string, profile: any): User {
     activitiesHosted: [],
     rating: Number(profile.rating ?? 0),
     ratingCount: profile.rating_count ?? 0,
+    verificationStatus: profile.verification_status ?? 'unverified',
     createdAt: profile.created_at ?? new Date().toISOString(),
   };
 }
@@ -195,6 +196,7 @@ async function resolveSessionUser(session: any, setUser: (user: User | null) => 
     activitiesHosted: [],
     rating: 0,
     ratingCount: 0,
+    verificationStatus: 'unverified',
     createdAt: new Date().toISOString(),
   });
 }
@@ -206,12 +208,21 @@ export async function signOutAndResetSession() {
   useAuthStore.getState().signOut();
 }
 
-export function useAuth() {
+type UseAuthOptions = {
+  initialize?: boolean;
+};
+
+export function useAuth(options: UseAuthOptions = {}) {
+  const { initialize = true } = options;
   const { user, isAuthenticated, isLoading, setUser, setLoading } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
 
   // Listen for auth state changes
   useEffect(() => {
+    if (!initialize) {
+      return;
+    }
+
     let isActive = true;
 
     const syncSession = async (session: any) => {
@@ -229,8 +240,10 @@ export function useAuth() {
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        await syncSession(session);
+      (_event, session) => {
+        setTimeout(() => {
+          void syncSession(session);
+        }, 0);
       }
     );
 
@@ -287,7 +300,7 @@ export function useAuth() {
       isActive = false;
       subscription.unsubscribe();
     };
-  }, [setLoading, setUser]);
+  }, [initialize, setLoading, setUser]);
 
   useEffect(() => {
     if (!isLoading) {

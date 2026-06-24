@@ -47,6 +47,13 @@ type UploadPayload = {
   contentType: string;
 };
 
+type ParticipantRowProps = {
+  userId: string;
+  index: number;
+  hostId: string;
+  onRemove: (userId: string) => void;
+};
+
 const deriveImageExtension = (uri: string, mimeType?: string): string => {
   if (mimeType?.startsWith('image/')) {
     const fromMime = mimeType.split('/')[1]?.toLowerCase();
@@ -68,8 +75,43 @@ const isWebBlobFile = (value: unknown): value is Blob => {
   return typeof Blob !== 'undefined' && value instanceof Blob;
 };
 
+const ParticipantRow = React.memo(function ParticipantRow({
+  userId,
+  index,
+  hostId,
+  onRemove,
+}: ParticipantRowProps) {
+  const handleRemove = useCallback(() => {
+    onRemove(userId);
+  }, [onRemove, userId]);
+
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
+      <View style={[styles.participantRow, Shadows.card]}>
+        <View style={styles.participantAvatar}>
+          <Ionicons name="person" size={18} color={Colors.white} />
+        </View>
+        <View style={styles.participantInfo}>
+          <Text style={styles.participantName}>
+            {userId === hostId ? `${userId} (Host)` : userId}
+          </Text>
+        </View>
+        {userId !== hostId && (
+          <TouchableOpacity
+            onPress={handleRemove}
+            style={styles.removeBtn}
+          >
+            <Ionicons name="close-circle" size={22} color={Colors.danger} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </Animated.View>
+  );
+});
+
 export default function ManageActivityScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: rawId } = useLocalSearchParams<{ id: string }>();
+  const id = rawId ? rawId.toString().trim() : '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
@@ -337,20 +379,9 @@ export default function ManageActivityScreen() {
     );
   };
 
-  if (!activity) {
-    return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <NavBar title="Manage" showBack />
-        <View style={styles.centered}>
-          <Text style={styles.emptyText}>Activity not found</Text>
-        </View>
-      </View>
-    );
-  }
+  const handleRemoveParticipant = useCallback((userId: string) => {
+    if (!activity) return;
 
-  const joined = activity.maxSlots - activity.currentSlots;
-
-  const handleRemoveParticipant = (userId: string) => {
     Alert.alert(
       'Remove Participant',
       'Are you sure you want to remove this participant?',
@@ -365,7 +396,7 @@ export default function ManageActivityScreen() {
         },
       ]
     );
-  };
+  }, [activity, leaveActivity]);
 
   const handleApproveRequest = async (request: PendingJoinRequest) => {
     if (!activity) return;
@@ -425,6 +456,31 @@ export default function ManageActivityScreen() {
     );
   };
 
+  const renderParticipant = useCallback(
+    ({ item, index }: { item: string; index: number }) => (
+      <ParticipantRow
+        userId={item}
+        index={index}
+        hostId={activity?.hostId ?? ''}
+        onRemove={handleRemoveParticipant}
+      />
+    ),
+    [activity?.hostId, handleRemoveParticipant]
+  );
+
+  if (!activity) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <NavBar title="Manage" showBack />
+        <View style={styles.centered}>
+          <Text style={styles.emptyText}>Activity not found</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const joined = activity.maxSlots - activity.currentSlots;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <NavBar title="Host Dashboard" showBack />
@@ -481,28 +537,7 @@ export default function ManageActivityScreen() {
           <FlatList
             data={activity.participants}
             keyExtractor={(item) => item}
-            renderItem={({ item: userId, index }) => (
-              <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
-                <View style={[styles.participantRow, Shadows.card]}>
-                  <View style={styles.participantAvatar}>
-                    <Ionicons name="person" size={18} color={Colors.white} />
-                  </View>
-                  <View style={styles.participantInfo}>
-                    <Text style={styles.participantName}>
-                      {userId === activity.hostId ? `${userId} (Host)` : userId}
-                    </Text>
-                  </View>
-                  {userId !== activity.hostId && (
-                    <TouchableOpacity
-                      onPress={() => handleRemoveParticipant(userId)}
-                      style={styles.removeBtn}
-                    >
-                      <Ionicons name="close-circle" size={22} color={Colors.danger} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </Animated.View>
-            )}
+            renderItem={renderParticipant}
             contentContainerStyle={styles.listContent}
             scrollEnabled={false}
           />

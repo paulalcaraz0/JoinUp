@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import { useChat } from '../../hooks/useChat';
 import { useActivities } from '../../hooks/useActivities';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
+import { InputLimits, trimInput } from '../../lib/validation';
 import type { Message } from '../../types';
 
 type ChatPerson = {
@@ -36,13 +37,115 @@ type ChatPerson = {
   photoUrl: string;
 };
 
+type MessageRowProps = {
+  message: Message;
+  currentUserId?: string;
+  hostId?: string;
+  onDelete: (message: Message) => void;
+};
+
+const MessageRow = React.memo(function MessageRow({
+  message,
+  currentUserId,
+  hostId,
+  onDelete,
+}: MessageRowProps) {
+  const isMe = message.senderId === currentUserId;
+  const isSystem = message.type === 'system';
+  const timeStr = message.createdAt
+    ? format(new Date(message.createdAt), 'h:mm a')
+    : '';
+  const canDelete = !isSystem && (message.senderId === currentUserId || hostId === currentUserId);
+
+  const handleDelete = useCallback(() => {
+    if (canDelete) {
+      onDelete(message);
+    }
+  }, [canDelete, message, onDelete]);
+
+  const handleOpenMap = useCallback(() => {
+    if (!message.location) return;
+    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${message.location.lat},${message.location.lng}`;
+    void Linking.openURL(mapUrl);
+  }, [message.location]);
+
+  if (isSystem) {
+    return (
+      <View style={styles.systemMessage}>
+        <Text style={styles.systemText}>{message.text}</Text>
+      </View>
+    );
+  }
+
+  if (message.type === 'location') {
+    const locationLabel =
+      message.location
+        ? `${message.location.lat.toFixed(4)}, ${message.location.lng.toFixed(4)}`
+        : 'Shared location';
+
+    return (
+      <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleOpenMap}
+          onLongPress={handleDelete}
+          style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+        >
+          <Ionicons name="location" size={18} color={isMe ? Colors.white : Colors.accent} />
+          <Text style={[styles.bubbleText, isMe && styles.bubbleTextSent]}>
+            Shared location
+          </Text>
+          <Text style={[styles.locationMetaText, isMe && styles.locationMetaTextSent]}>{locationLabel}</Text>
+          <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (message.type === 'image' && message.imageUrl) {
+    return (
+      <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onLongPress={handleDelete}
+          style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+        >
+          <Image source={{ uri: message.imageUrl }} style={styles.imageMessage} resizeMode="cover" />
+          <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
+      {!isMe && (
+        <View style={styles.senderInfo}>
+          <Text style={styles.senderName}>{message.senderName}</Text>
+        </View>
+      )}
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onLongPress={handleDelete}
+        style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+      >
+        <Text style={[styles.bubbleText, isMe && styles.bubbleTextSent]}>
+          {message.text}
+        </Text>
+        <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+});
+
 export default function GroupChatScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: rawId } = useLocalSearchParams<{ id: string }>();
+  const id = rawId ? rawId.toString().trim() : '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const { activities, getJoinStatus, canAccessChat } = useActivities();
-  const { messages, isLoading, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch } = useChat(id ?? '');
+  const { messages, isLoading, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch } = useChat(id);
 
   const [inputText, setInputText] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -162,23 +265,34 @@ export default function GroupChatScreen() {
     }, [refetch])
   );
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     try {
       setIsRefreshing(true);
       await refetch();
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, [refetch]);
 
-  const handleSend = async () => {
-    if (!inputText.trim() || !user) return;
-    const text = inputText.trim();
+  const handleSend = useCallback(async () => {
+    const text = trimInput(inputText);
+    if (!text || !user) return;
+
+    if (text.length > InputLimits.chatMessage) {
+      Alert.alert('Message too long', `Keep messages under ${InputLimits.chatMessage} characters.`);
+      return;
+    }
+
     setInputText('');
-    await sendMessage(text, user.uid, user.displayName);
-  };
+    try {
+      await sendMessage(text, user.uid, user.displayName);
+    } catch (error: any) {
+      setInputText(text);
+      Alert.alert('Message not sent', error?.message ?? 'Could not send this message. Please try again.');
+    }
+  }, [inputText, sendMessage, user]);
 
-  const uploadChatImage = async (asset: ImagePicker.ImagePickerAsset) => {
+  const uploadChatImage = useCallback(async (asset: ImagePicker.ImagePickerAsset) => {
     const uri = asset.uri;
     const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -227,9 +341,9 @@ export default function GroupChatScreen() {
     // The bucket is configured as public in Supabase, so this stays stable.
     const publicResp = (supabase as any).storage.from('chat-images').getPublicUrl(objectPath);
     return publicResp.data?.publicUrl ?? '';
-  };
+  }, [id, user?.uid]);
 
-  const handleAttachPhoto = async () => {
+  const handleAttachPhoto = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -257,9 +371,9 @@ export default function GroupChatScreen() {
     } finally {
       setIsUploadingImage(false);
     }
-  };
+  }, [sendImage, uploadChatImage, user]);
 
-  const handleShareLocation = async () => {
+  const handleShareLocation = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -286,9 +400,9 @@ export default function GroupChatScreen() {
     } finally {
       setIsSharingLocation(false);
     }
-  };
+  }, [sendLocation, user]);
 
-  const handleReportConversation = async () => {
+  const handleReportConversation = useCallback(async () => {
     if (!user?.uid || !id) return;
 
     try {
@@ -311,9 +425,9 @@ export default function GroupChatScreen() {
     } catch {
       Alert.alert('Report unavailable', 'Could not send the report right now. Please try again later.');
     }
-  };
+  }, [id, latestOtherParticipant, messages, user?.uid]);
 
-  const handleBlockLatestParticipant = async () => {
+  const handleBlockLatestParticipant = useCallback(async () => {
     if (!user?.uid || !latestOtherParticipant) {
       Alert.alert('No participant to block', 'There are no other chat participants visible in this conversation yet.');
       return;
@@ -335,9 +449,9 @@ export default function GroupChatScreen() {
     } catch {
       Alert.alert('Block unavailable', 'Could not block this user right now. Please try again later.');
     }
-  };
+  }, [latestOtherParticipant, user?.uid]);
 
-  const openSafetyMenu = () => {
+  const openSafetyMenu = useCallback(() => {
     Alert.alert(
       'Chat safety',
       'Report harmful content or hide messages from a participant.',
@@ -347,16 +461,9 @@ export default function GroupChatScreen() {
         { text: 'Cancel', style: 'cancel' },
       ]
     );
-  };
+  }, [handleBlockLatestParticipant, handleReportConversation]);
 
-  const canDeleteMessage = (message: Message) => {
-    if (message.type === 'system') return false;
-    return message.senderId === user?.uid || activity?.hostId === user?.uid;
-  };
-
-  const handleDeleteMessage = (message: Message) => {
-    if (!canDeleteMessage(message)) return;
-
+  const handleDeleteMessage = useCallback((message: Message) => {
     const isOwnMessage = message.senderId === user?.uid;
     Alert.alert(
       'Delete message?',
@@ -381,89 +488,23 @@ export default function GroupChatScreen() {
         },
       ]
     );
-  };
+  }, [deleteMessage, user?.uid]);
 
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isMe = item.senderId === user?.uid;
-    const isSystem = item.type === 'system';
-    const timeStr = item.createdAt
-      ? format(new Date(item.createdAt), 'h:mm a')
-      : '';
+  const renderMessage = useCallback(
+    ({ item }: { item: Message }) => (
+      <MessageRow
+        message={item}
+        currentUserId={user?.uid}
+        hostId={activity?.hostId}
+        onDelete={handleDeleteMessage}
+      />
+    ),
+    [activity?.hostId, handleDeleteMessage, user?.uid]
+  );
 
-    if (isSystem) {
-      return (
-        <View style={styles.systemMessage}>
-          <Text style={styles.systemText}>{item.text}</Text>
-        </View>
-      );
-    }
-
-    if (item.type === 'location') {
-      const locationLabel =
-        item.location
-          ? `${item.location.lat.toFixed(4)}, ${item.location.lng.toFixed(4)}`
-          : 'Shared location';
-
-      const handleOpenMap = () => {
-        if (!item.location) return;
-        const mapUrl = `https://www.google.com/maps/search/?api=1&query=${item.location.lat},${item.location.lng}`;
-        void Linking.openURL(mapUrl);
-      };
-
-      return (
-        <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={handleOpenMap}
-            onLongPress={() => handleDeleteMessage(item)}
-            style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
-          >
-            <Ionicons name="location" size={18} color={isMe ? Colors.white : Colors.accent} />
-            <Text style={[styles.bubbleText, isMe && styles.bubbleTextSent]}>
-              Shared location
-            </Text>
-            <Text style={[styles.locationMetaText, isMe && styles.locationMetaTextSent]}>{locationLabel}</Text>
-            <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    if (item.type === 'image' && item.imageUrl) {
-      return (
-        <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
-          <TouchableOpacity
-            activeOpacity={0.9}
-            onLongPress={() => handleDeleteMessage(item)}
-            style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
-          >
-            <Image source={{ uri: item.imageUrl }} style={styles.imageMessage} resizeMode="cover" />
-            <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    return (
-      <View style={[styles.bubbleRow, isMe ? styles.bubbleRowRight : styles.bubbleRowLeft]}>
-        {!isMe && (
-          <View style={styles.senderInfo}>
-            <Text style={styles.senderName}>{item.senderName}</Text>
-          </View>
-        )}
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onLongPress={() => handleDeleteMessage(item)}
-          style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
-        >
-          <Text style={[styles.bubbleText, isMe && styles.bubbleTextSent]}>
-            {item.text}
-          </Text>
-          <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
+  const handleContentSizeChange = useCallback(() => {
+    flatListRef.current?.scrollToEnd({ animated: false });
+  }, []);
 
   if (activity && !isChatAllowed) {
     const isRejected = joinStatus === 'rejected';
@@ -629,7 +670,7 @@ export default function GroupChatScreen() {
               : ''
             }
           </Text>
-          <Text style={styles.eventBannerSub}>{activity.location.name}, West Entrance</Text>
+          <Text style={styles.eventBannerSub}>{activity.location.name}</Text>
         </View>
       )}
 
@@ -676,7 +717,7 @@ export default function GroupChatScreen() {
           value={inputText}
           onChangeText={setInputText}
           multiline
-          maxLength={500}
+          maxLength={InputLimits.chatMessage}
         />
         <TouchableOpacity
           style={styles.locationBtn}

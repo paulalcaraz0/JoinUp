@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import type { Message } from '../types';
 import { getMockChatMessages } from '../lib/mockChats';
+import { InputLimits, trimInput } from '../lib/validation';
 
 const chatSupabase = supabase as any;
 
@@ -224,6 +225,15 @@ export function useChat(activityId: string) {
 
   const sendMessage = useCallback(
     async (text: string, senderId: string, senderName: string) => {
+      const nextText = trimInput(text);
+      if (!nextText) {
+        throw new Error('Message cannot be empty.');
+      }
+
+      if (nextText.length > InputLimits.chatMessage) {
+        throw new Error(`Keep messages under ${InputLimits.chatMessage} characters.`);
+      }
+
       if (isMockThread) {
         const mockMessage: Message = {
           id: `${activityId}-local-${Date.now()}`,
@@ -231,7 +241,7 @@ export function useChat(activityId: string) {
           senderId,
           senderName,
           senderPhoto: '',
-          text,
+          text: nextText,
           type: 'text',
           isPinned: false,
           createdAt: new Date().toISOString(),
@@ -250,7 +260,7 @@ export function useChat(activityId: string) {
         .insert({
           activity_id: activityId,
           sender_id: senderId,
-          text,
+          text: nextText,
           type: 'text',
         })
         .select()

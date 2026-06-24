@@ -8,6 +8,7 @@ import {
   Alert,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,16 +20,28 @@ import { PrimaryButton } from '../../../components/ui/PrimaryButton';
 import { SlotProgressBar } from '../../../components/ui/SlotProgressBar';
 import { AvatarStack } from '../../../components/ui/AvatarStack';
 import { BottomSheet } from '../../../components/ui/BottomSheet';
+import { EmptyState } from '../../../components/ui/EmptyState';
 import { NavBar } from '../../../components/layout/NavBar';
 import { useActivities } from '../../../hooks/useActivities';
 import { useAuthStore } from '../../../store/authStore';
 
 export default function ActivityDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id: rawId } = useLocalSearchParams<{ id: string }>();
+  const id = rawId ? rawId.toString().trim() : '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const galleryWidth = Dimensions.get('window').width - Spacing.md * 2;
-  const { activities, joinActivity, leaveActivity, getJoinStatus, canAccessChat, deleteRejectedJoin } = useActivities();
+  const {
+    activities,
+    isLoading,
+    error,
+    joinActivity,
+    leaveActivity,
+    getJoinStatus,
+    canAccessChat,
+    deleteRejectedJoin,
+    refetch,
+  } = useActivities();
   const user = useAuthStore((s) => s.user);
 
   const [showJoinSheet, setShowJoinSheet] = useState(false);
@@ -39,13 +52,30 @@ export default function ActivityDetailScreen() {
     [activities, id]
   );
 
-  if (!activity) {
+  if (isLoading) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <NavBar title="Activity" showBack />
         <View style={styles.centered}>
-          <Text style={styles.notFoundText}>Activity not found</Text>
+          <ActivityIndicator size="large" color={Colors.accent} />
         </View>
+      </View>
+    );
+  }
+
+  if (!activity) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <NavBar title="Activity" showBack />
+        <EmptyState
+          icon={error ? 'alert-circle-outline' : 'calendar-outline'}
+          title={error ? 'Could not load activity' : 'Activity not found'}
+          message={error ?? 'This activity may have been removed or is no longer available.'}
+          actionLabel="Try again"
+          onAction={() => {
+            void refetch();
+          }}
+        />
       </View>
     );
   }

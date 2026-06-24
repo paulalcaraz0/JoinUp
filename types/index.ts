@@ -10,6 +10,7 @@ export interface User {
   activitiesHosted: string[];
   rating: number;
   ratingCount: number;
+  verificationStatus: 'unverified' | 'pending' | 'verified' | 'rejected';
   createdAt: string; // ISO 8601
 }
 
