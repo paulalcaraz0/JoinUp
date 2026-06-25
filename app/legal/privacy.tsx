@@ -70,10 +70,11 @@ export default function PrivacyPolicyScreen() {
       </Section>
 
       <Section title="Account Deletion">
-        You can delete your account from Profile settings. Deleting your account removes your profile and
-        related account data according to the app's database retention behavior. Some records may be kept
-        for a limited time when needed for safety, fraud prevention, dispute handling, legal compliance, or
-        abuse investigations.
+        You can delete your account inside the app from Profile settings. You can also request account
+        deletion by emailing alcarazpaul4@gmail.com. Deleting your account removes your profile and related
+        account data according to the app's database retention behavior. Some records may be kept for a
+        limited time when needed for safety, fraud prevention, dispute handling, legal compliance, or abuse
+        investigations.
       </Section>
 
       <Section title="Your Choices">
@@ -94,8 +95,8 @@ export default function PrivacyPolicyScreen() {
       </Section>
 
       <Section title="Contact">
-        For privacy, safety, account deletion, or ID verification requests, contact the JoinUp administrator.
-        Replace this text with your production support email before store submission.
+        For privacy, safety, account deletion, or ID verification requests, contact JoinUp developer
+        Paul Alcaraz at alcarazpaul4@gmail.com.
       </Section>
     </ScrollView>
   );

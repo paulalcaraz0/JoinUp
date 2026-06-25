@@ -43,7 +43,8 @@ export default function TermsScreen() {
       </Section>
 
       <Section title="Contact">
-        Replace this section with your production support email before store submission.
+        For questions about JoinUp or these terms, contact developer Paul Alcaraz at
+        alcarazpaul4@gmail.com.
       </Section>
     </ScrollView>
   );
