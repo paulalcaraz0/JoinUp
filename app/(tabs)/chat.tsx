@@ -608,7 +608,10 @@ export default function ChatListScreen() {
           data={chatActivities}
           keyExtractor={(item) => item.id}
           renderItem={renderChatActivity}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + Spacing.xl * 3 },
+          ]}
           showsVerticalScrollIndicator={false}
         />
       )}

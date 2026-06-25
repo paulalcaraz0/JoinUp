@@ -528,7 +528,10 @@ export default function ExploreScreen() {
               keyExtractor={(item) => item.id}
               renderItem={renderActivityItem}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingBottom: insets.bottom + Spacing.xl * 3 },
+              ]}
               initialNumToRender={6}
               maxToRenderPerBatch={6}
               windowSize={7}
@@ -593,7 +596,10 @@ export default function ExploreScreen() {
               keyExtractor={(item) => item.uid}
               renderItem={renderUserItem}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[
+                styles.listContent,
+                { paddingBottom: insets.bottom + Spacing.xl * 3 },
+              ]}
               initialNumToRender={6}
               maxToRenderPerBatch={6}
               windowSize={7}
