@@ -447,7 +447,6 @@ export default function CreateActivityScreen() {
       ]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to create activity. Please try again.';
-      console.error('[create] failed to create activity', err);
       Alert.alert('Error', message);
     } finally {
       setIsUploadingCover(false);

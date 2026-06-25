@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as Location from 'expo-location';
 
 interface LocationData {
   latitude: number;
@@ -16,15 +17,30 @@ export function useLocation() {
     try {
       setIsLoading(true);
       setError(null);
-      // Mock location - San Francisco
-      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') {
+        setLocation(null);
+        setError('Location permission was not granted.');
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const [place] = await Location.reverseGeocodeAsync({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+
       setLocation({
-        latitude: 37.7749,
-        longitude: -122.4194,
-        city: 'San Francisco',
-        state: 'CA',
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        city: place?.city ?? place?.subregion ?? '',
+        state: place?.region ?? '',
       });
     } catch (err) {
+      setLocation(null);
       setError('Failed to get location. Please enable location services.');
     } finally {
       setIsLoading(false);

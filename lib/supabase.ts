@@ -23,11 +23,6 @@ export const isSupabaseConfigured = Boolean(supabaseConfig.url && supabaseConfig
 if (!isSupabaseConfigured) {
   // Don't throw at import time — allow the app to boot so Metro/router can show UI.
   // Consumers of `supabase` will get a helpful runtime error if they try to use it.
-  // Log details to help debugging.
-  // eslint-disable-next-line no-console
-  console.error(
-    'Supabase not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY in .env or app.config.js'
-  );
 }
 
 const createThrowingProxy = (message: string): SupabaseClient =>

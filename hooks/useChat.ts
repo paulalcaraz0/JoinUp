@@ -409,9 +409,6 @@ export function useChat(activityId: string) {
         .single();
 
       if (error) {
-        // Log and throw so callers (UI) can show an error immediately.
-        // eslint-disable-next-line no-console
-        console.error('sendImage error', error);
         throw error;
       }
 

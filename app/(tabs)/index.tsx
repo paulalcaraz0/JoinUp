@@ -445,7 +445,7 @@ export default function HomeFeedScreen() {
             removeClippedSubviews
             contentContainerStyle={[
               styles.feedContent,
-              { paddingBottom: insets.bottom + Spacing.xl * 2 },
+              { paddingBottom: insets.bottom + Spacing.xl * 3 },
             ]}
             showsVerticalScrollIndicator={false}
             onScroll={handleFeedScroll}
