@@ -73,6 +73,43 @@ type UnreadDividerProps = {
   label: string;
 };
 
+type DateDividerProps = {
+  label: string;
+};
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getMessageDate(message?: Message) {
+  if (!message?.createdAt) return null;
+
+  const date = new Date(message.createdAt);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getMessageDayKey(message?: Message) {
+  const date = getMessageDate(message);
+  if (!date) return '';
+
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function formatMessageDateLabel(message: Message) {
+  const date = getMessageDate(message);
+  if (!date) return '';
+
+  const messageDay = startOfLocalDay(date).getTime();
+  const today = startOfLocalDay(new Date()).getTime();
+  const dayDiff = Math.round((today - messageDay) / 86400000);
+
+  if (dayDiff === 0) return 'Today';
+  if (dayDiff === 1) return 'Yesterday';
+  if (dayDiff > 1 && dayDiff < 7) return format(date, 'EEEE');
+
+  return format(date, 'MMM d, yyyy');
+}
+
 const UnreadDivider = React.memo(function UnreadDivider({ label }: UnreadDividerProps) {
   return (
     <View style={styles.unreadDividerWrap}>
@@ -81,6 +118,16 @@ const UnreadDivider = React.memo(function UnreadDivider({ label }: UnreadDivider
         <Text style={styles.unreadDividerText}>{label}</Text>
       </View>
       <View style={styles.unreadDividerLine} />
+    </View>
+  );
+});
+
+const DateDivider = React.memo(function DateDivider({ label }: DateDividerProps) {
+  if (!label) return null;
+
+  return (
+    <View style={styles.dateDividerWrap}>
+      <Text style={styles.dateDividerText}>{label}</Text>
     </View>
   );
 });
@@ -711,18 +758,25 @@ export default function GroupChatScreen() {
   }, [deleteMessage, user?.uid]);
 
   const renderMessage = useCallback(
-    ({ item, index }: { item: Message; index: number }) => (
-      <View>
-        {index === unreadDividerIndex ? <UnreadDivider label="Unread messages" /> : null}
-        <MessageRow
-          message={item}
-          currentUserId={user?.uid}
-          hostId={activity?.hostId}
-          onDelete={handleDeleteMessage}
-        />
-      </View>
-    ),
-    [activity?.hostId, handleDeleteMessage, unreadDividerIndex, user?.uid]
+    ({ item, index }: { item: Message; index: number }) => {
+      const previousMessage = visibleMessages[index - 1];
+      const shouldShowDateDivider =
+        index === 0 || getMessageDayKey(item) !== getMessageDayKey(previousMessage);
+
+      return (
+        <View>
+          {shouldShowDateDivider ? <DateDivider label={formatMessageDateLabel(item)} /> : null}
+          {index === unreadDividerIndex ? <UnreadDivider label="Unread messages" /> : null}
+          <MessageRow
+            message={item}
+            currentUserId={user?.uid}
+            hostId={activity?.hostId}
+            onDelete={handleDeleteMessage}
+          />
+        </View>
+      );
+    },
+    [activity?.hostId, handleDeleteMessage, unreadDividerIndex, user?.uid, visibleMessages]
   );
 
   if (activity && !isChatAllowed) {
@@ -1243,6 +1297,23 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyMed,
     fontSize: 11,
     color: Colors.slate,
+    letterSpacing: 0,
+  },
+  dateDividerWrap: {
+    alignSelf: 'center',
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 5,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  dateDividerText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.textSecondary,
     letterSpacing: 0,
   },
   messagesList: {
