@@ -52,7 +52,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "JoinUp lets you choose photos for your profile, activity covers, and chat messages."
+          "photosPermission": "JoinUp lets you choose photos for your profile, activity covers, and chat messages.",
+          "microphonePermission": false
         }
       ],
       "expo-notifications",

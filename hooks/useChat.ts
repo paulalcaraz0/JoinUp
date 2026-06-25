@@ -9,6 +9,8 @@ const chatSupabase = supabase as any;
 
 const MOCK_CHAT_STORAGE_PREFIX = 'mockChatMessages:v1:';
 const UNREAD_CHAT_STORAGE_PREFIX = 'chatUnreadActivityIds:v1:';
+const CHAT_IMAGE_BUCKET = 'chat-images';
+const CHAT_IMAGE_SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 function mockChatStorageKey(activityId: string) {
   return `${MOCK_CHAT_STORAGE_PREFIX}${activityId}`;
@@ -137,25 +139,64 @@ function mergeMockMessages(seeded: Message[], persisted: Message[]) {
   return Array.from(merged.values());
 }
 
-function mapMessage(row: any): Message {
-  const resolveChatImageUrl = (imageUrl?: string): string | undefined => {
-    if (!imageUrl) return undefined;
-    if (!imageUrl.includes('/chat-images/')) return imageUrl;
+function getChatImageObjectPath(imageUrl?: string): string | undefined {
+  if (!imageUrl) return undefined;
 
-    try {
-      const parsed = new URL(imageUrl);
-      const marker = '/chat-images/';
-      const markerIndex = parsed.pathname.indexOf(marker);
+  if (!/^https?:\/\//i.test(imageUrl)) {
+    return imageUrl;
+  }
 
-      if (markerIndex === -1) return imageUrl;
+  try {
+    const parsed = new URL(imageUrl);
+    const publicMarker = `/${CHAT_IMAGE_BUCKET}/`;
+    const publicMarkerIndex = parsed.pathname.indexOf(publicMarker);
 
-      const objectPath = decodeURIComponent(parsed.pathname.slice(markerIndex + marker.length));
-      return (supabase as any).storage.from('chat-images').getPublicUrl(objectPath).data.publicUrl;
-    } catch {
-      return imageUrl;
+    if (publicMarkerIndex !== -1) {
+      return decodeURIComponent(parsed.pathname.slice(publicMarkerIndex + publicMarker.length));
     }
-  };
 
+    const signedMarker = `/object/sign/${CHAT_IMAGE_BUCKET}/`;
+    const signedMarkerIndex = parsed.pathname.indexOf(signedMarker);
+
+    if (signedMarkerIndex !== -1) {
+      return decodeURIComponent(parsed.pathname.slice(signedMarkerIndex + signedMarker.length));
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+async function resolveChatImageUrl(imageUrl?: string): Promise<string | undefined> {
+  const objectPath = getChatImageObjectPath(imageUrl);
+  if (!objectPath) return imageUrl;
+
+  try {
+    const { data, error } = await chatSupabase.storage
+      .from(CHAT_IMAGE_BUCKET)
+      .createSignedUrl(objectPath, CHAT_IMAGE_SIGNED_URL_TTL_SECONDS);
+
+    if (error || !data?.signedUrl) return undefined;
+    return data.signedUrl;
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveMessageImages(messages: Message[]) {
+  return Promise.all(
+    messages.map(async (message) => {
+      if (message.type !== 'image') return message;
+      return {
+        ...message,
+        imageUrl: await resolveChatImageUrl(message.imageUrl),
+      };
+    })
+  );
+}
+
+async function mapMessage(row: any): Promise<Message> {
   return {
     id: row.id,
     activityId: row.activity_id,
@@ -163,7 +204,7 @@ function mapMessage(row: any): Message {
     senderName: row.sender_name ?? '',
     senderPhoto: row.sender_photo ?? '',
     text: row.text ?? undefined,
-    imageUrl: resolveChatImageUrl(row.image_url ?? undefined),
+    imageUrl: await resolveChatImageUrl(row.image_url ?? undefined),
     location:
       row.location_lat != null && row.location_lng != null
         ? { lat: row.location_lat, lng: row.location_lng }
@@ -184,9 +225,9 @@ export function useChat(activityId: string) {
     setIsLoading(true);
     try {
       if (isMockThread) {
-        const seededMessages = getMockChatMessages(activityId);
+        const seededMessages = await resolveMessageImages(getMockChatMessages(activityId));
         const persistedMessages = await readPersistedMockMessages(activityId);
-        setMessages(mergeMockMessages(seededMessages, persistedMessages));
+        setMessages(mergeMockMessages(seededMessages, await resolveMessageImages(persistedMessages)));
         return;
       }
 
@@ -197,7 +238,7 @@ export function useChat(activityId: string) {
         .order('created_at', { ascending: true });
 
       if (!error && data) {
-        setMessages(data.map(mapMessage));
+        setMessages(await Promise.all(data.map(mapMessage)));
       }
     } finally {
       setIsLoading(false);
@@ -237,9 +278,10 @@ export function useChat(activityId: string) {
             .single();
 
           if (data && isActive) {
+            const nextMessage = await mapMessage(data);
             setMessages((prev) => {
-              if (prev.some((message) => message.id === data.id)) return prev;
-              return [...prev, mapMessage(data)];
+              if (prev.some((message) => message.id === nextMessage.id)) return prev;
+              return [...prev, nextMessage];
             });
           }
         }
@@ -322,12 +364,10 @@ export function useChat(activityId: string) {
         .single();
 
       if (!error && data) {
+        const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
         setMessages((prev) => {
-          if (prev.some((message) => message.id === data.id)) return prev;
-          return [
-            ...prev,
-            mapMessage({ ...data, sender_name: senderName, sender_photo: '' }),
-          ];
+          if (prev.some((message) => message.id === nextMessage.id)) return prev;
+          return [...prev, nextMessage];
         });
       }
     },
@@ -376,12 +416,10 @@ export function useChat(activityId: string) {
       }
 
       if (data) {
+        const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
         setMessages((prev) => {
-          if (prev.some((message) => message.id === data.id)) return prev;
-          return [
-            ...prev,
-            mapMessage({ ...data, sender_name: senderName, sender_photo: '' }),
-          ];
+          if (prev.some((message) => message.id === nextMessage.id)) return prev;
+          return [...prev, nextMessage];
         });
       }
     },
@@ -424,12 +462,10 @@ export function useChat(activityId: string) {
         .single();
 
       if (!error && data) {
+        const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
         setMessages((prev) => {
-          if (prev.some((message) => message.id === data.id)) return prev;
-          return [
-            ...prev,
-            mapMessage({ ...data, sender_name: senderName, sender_photo: '' }),
-          ];
+          if (prev.some((message) => message.id === nextMessage.id)) return prev;
+          return [...prev, nextMessage];
         });
       }
     },

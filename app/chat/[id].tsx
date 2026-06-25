@@ -244,6 +244,36 @@ const MessageRow = React.memo(function MessageRow({
     );
   }
 
+  if (message.type === 'image') {
+    const unavailableBubble = (
+      <>
+        {!isMe ? (
+          <View style={styles.senderInfo}>
+            <Text style={styles.senderName}>{message.senderName}</Text>
+          </View>
+        ) : null}
+        <View style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}>
+          <View style={styles.imageUnavailableWrap}>
+            <Ionicons name="image-outline" size={22} color={isMe ? Colors.white : Colors.slate} />
+            <Text style={[styles.imageUnavailableText, isMe && styles.imageUnavailableTextSent]}>
+              Image unavailable
+            </Text>
+          </View>
+          <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+        </View>
+      </>
+    );
+
+    return isMe ? (
+      <View style={[styles.bubbleRow, styles.bubbleRowRight]}>{unavailableBubble}</View>
+    ) : (
+      <View style={styles.receivedMessageRow}>
+        {senderAvatar}
+        <View style={styles.receivedBubbleWrap}>{unavailableBubble}</View>
+      </View>
+    );
+  }
+
   return isMe ? (
     <View style={[styles.bubbleRow, styles.bubbleRowRight]}>
       <TouchableOpacity
@@ -600,10 +630,7 @@ export default function GroupChatScreen() {
       });
 
     if (error) throw error;
-    // Store the public URL so the message can be reloaded after navigation.
-    // The bucket is configured as public in Supabase, so this stays stable.
-    const publicResp = (supabase as any).storage.from('chat-images').getPublicUrl(objectPath);
-    return publicResp.data?.publicUrl ?? '';
+    return objectPath;
   }, [id, user?.uid]);
 
   const handleAttachPhoto = useCallback(async () => {
@@ -627,9 +654,9 @@ export default function GroupChatScreen() {
 
       if (result.canceled || !result.assets?.[0]?.uri) return;
 
-      const publicUrl = await uploadChatImage(result.assets[0]);
+      const imageObjectPath = await uploadChatImage(result.assets[0]);
       shouldAutoScrollRef.current = true;
-      await sendImage(publicUrl, user.uid, user.displayName);
+      await sendImage(imageObjectPath, user.uid, user.displayName);
     } catch (error) {
       shouldAutoScrollRef.current = false;
       Alert.alert('Upload failed', 'Could not attach this photo. Please try again.');
@@ -1420,6 +1447,25 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: BorderRadius.sm,
     marginBottom: 4,
+  },
+  imageUnavailableWrap: {
+    width: 220,
+    minHeight: 92,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    marginBottom: 4,
+  },
+  imageUnavailableText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 13,
+    color: Colors.slate,
+  },
+  imageUnavailableTextSent: {
+    color: Colors.white + 'D9',
   },
   timeText: {
     fontFamily: Typography.body,
