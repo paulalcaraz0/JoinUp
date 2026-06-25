@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Activity, JoinRequestStatus } from '../types';
-import { MOCK_ACTIVITIES } from '../lib/mockActivities';
+import { MOCK_ACTIVITIES, SHOULD_USE_MOCK_ACTIVITIES } from '../lib/mockActivities';
 
 interface ActivityState {
   activities: Activity[];
@@ -25,7 +25,7 @@ function dedupeActivities(activities: Activity[]) {
 }
 
 export const useActivityStore = create<ActivityState>((set, get) => ({
-  activities: MOCK_ACTIVITIES,
+  activities: SHOULD_USE_MOCK_ACTIVITIES ? MOCK_ACTIVITIES : [],
   joinStatuses: {},
   selectedCategory: 'All',
   searchQuery: '',

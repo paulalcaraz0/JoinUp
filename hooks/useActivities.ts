@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import type { Activity, JoinRequestStatus } from '../types';
-import { MOCK_ACTIVITIES } from '../lib/mockActivities';
+import { MOCK_ACTIVITIES, SHOULD_USE_MOCK_ACTIVITIES } from '../lib/mockActivities';
 import { useActivityStore } from '../store/activityStore';
 import { useAuthStore } from '../store/authStore';
 import { DatabaseTables, ParticipantStatus, ActivityStatus, NotificationTypes, ActivityCategories } from '../lib/constants/database';
@@ -225,9 +225,11 @@ export function useActivities() {
   const mergeActivities = useCallback((incoming: Activity[]) => {
     const merged = new Map<string, Activity>();
 
-    MOCK_ACTIVITIES.forEach((activity) => {
-      merged.set(activity.id, activity);
-    });
+    if (SHOULD_USE_MOCK_ACTIVITIES) {
+      MOCK_ACTIVITIES.forEach((activity) => {
+        merged.set(activity.id, activity);
+      });
+    }
 
     incoming.forEach((activity) => {
       merged.set(activity.id, activity);

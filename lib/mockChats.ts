@@ -1,5 +1,5 @@
 import type { Message, Activity } from '../types';
-import { MOCK_ACTIVITIES } from './mockActivities';
+import { MOCK_ACTIVITIES, SHOULD_USE_MOCK_ACTIVITIES } from './mockActivities';
 
 export interface MockChatThread {
   activityId: string;
@@ -97,13 +97,15 @@ function buildThread(activity: Activity, activityIndex: number): MockChatThread 
   return { activityId: activity.id, messages };
 }
 
-export const MOCK_CHAT_THREADS: Record<string, MockChatThread> = MOCK_ACTIVITIES.reduce<Record<string, MockChatThread>>(
-  (acc, activity, index) => {
-    acc[activity.id] = buildThread(activity, index);
-    return acc;
-  },
-  {}
-);
+export const MOCK_CHAT_THREADS: Record<string, MockChatThread> = SHOULD_USE_MOCK_ACTIVITIES
+  ? MOCK_ACTIVITIES.reduce<Record<string, MockChatThread>>(
+      (acc, activity, index) => {
+        acc[activity.id] = buildThread(activity, index);
+        return acc;
+      },
+      {}
+    )
+  : {};
 
 export function getMockChatMessages(activityId: string) {
   return MOCK_CHAT_THREADS[activityId]?.messages ?? [];

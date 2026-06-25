@@ -2,6 +2,8 @@ import type { Activity } from '../types';
 
 type Category = Activity['category'];
 
+export const SHOULD_USE_MOCK_ACTIVITIES = __DEV__;
+
 const CATEGORY_SEEDS: Record<Category, Array<{ title: string; location: string; description: string }>> = {
   Fitness: [
     { title: 'Sunrise Run Club', location: 'Luneta Park, Manila', description: 'Easy paced 5K with a coffee stop after.' },
