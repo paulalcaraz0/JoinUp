@@ -257,6 +257,10 @@ export default function HomeFeedScreen() {
     router.push(`/activity/${activityId}`);
   }, [router]);
 
+  const handleOpenBuddy = useCallback(() => {
+    router.push('/buddy');
+  }, [router]);
+
   const handleJoinActivity = useCallback(async (activityId: string, userId: string) => {
     if (fadingActivityIdsRef.current.includes(activityId)) return false;
 
@@ -460,6 +464,20 @@ export default function HomeFeedScreen() {
           />
         )}
       </View>
+
+      <TouchableOpacity
+        style={[
+          styles.buddyFloatingButton,
+          { bottom: insets.bottom + Spacing.xl * 2 + 16 },
+        ]}
+        onPress={handleOpenBuddy}
+        activeOpacity={0.88}
+      >
+        <View style={styles.buddyFloatingIcon}>
+          <Ionicons name="sparkles" size={18} color={Colors.white} />
+        </View>
+        <Text style={styles.buddyFloatingText}>Ask JoinUp Buddy</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -637,5 +655,32 @@ const styles = StyleSheet.create({
   },
   feedContent: {
     paddingBottom: Spacing.xl,
+  },
+  buddyFloatingButton: {
+    position: 'absolute',
+    right: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.pill,
+    paddingVertical: 10,
+    paddingLeft: 10,
+    paddingRight: 14,
+    zIndex: 20,
+    ...Shadows.fab,
+  },
+  buddyFloatingIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buddyFloatingText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
+    color: Colors.white,
   },
 });

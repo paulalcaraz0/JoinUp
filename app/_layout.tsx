@@ -60,6 +60,7 @@ export default function RootLayout() {
     const isProtectedRoute =
       currentPath.startsWith('/(tabs)') ||
       currentPath.startsWith('/activity') ||
+      currentPath.startsWith('/buddy') ||
       currentPath.startsWith('/chat') ||
       currentPath.startsWith('/notifications') ||
       currentPath.startsWith('/profile') ||
@@ -126,6 +127,12 @@ export default function RootLayout() {
             <Stack.Screen name="auth/callback" />
             <Stack.Screen
               name="activity/[id]"
+              options={{
+                animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="buddy"
               options={{
                 animation: 'slide_from_right',
               }}

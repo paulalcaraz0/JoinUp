@@ -37,6 +37,42 @@ export interface Activity {
 
 export type JoinRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
+export interface ActivityDraft {
+  title: string;
+  description: string;
+  category: Activity['category'];
+  location: string;
+  date: string;
+  time: string;
+  maxParticipants: number;
+  notes?: string;
+}
+
+export interface ActivityRecommendation {
+  activityId: string;
+  title: string;
+  reason: string;
+  category: Activity['category'];
+  location: string;
+  dateTime: string;
+  availableSlots: number;
+}
+
+export interface BuddyMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  createdAt: string;
+  draft?: ActivityDraft;
+  recommendations?: ActivityRecommendation[];
+}
+
+export interface BuddyResponse {
+  message: BuddyMessage;
+  draft?: ActivityDraft;
+  recommendations?: ActivityRecommendation[];
+}
+
 export interface Message {
   id: string;
   activityId: string;

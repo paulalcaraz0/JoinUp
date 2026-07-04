@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   Image,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -95,9 +95,19 @@ const isMissingImagesColumnError = (error: unknown): boolean => {
 
 export default function CreateActivityScreen() {
   const router = useRouter();
+  const draftParams = useLocalSearchParams<{
+    title?: string;
+    description?: string;
+    category?: string;
+    location?: string;
+    date?: string;
+    time?: string;
+    maxParticipants?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const { refetch } = useActivities();
+  const lastAppliedDraftRef = useRef<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -116,6 +126,45 @@ export default function CreateActivityScreen() {
   const [errors, setErrors] = useState<FormErrors>({});
 
   const parsedMaxSlots = useMemo(() => Number.parseInt(maxSlots, 10), [maxSlots]);
+
+  useEffect(() => {
+    const draftKey = JSON.stringify(draftParams);
+    if (!draftParams.title || lastAppliedDraftRef.current === draftKey) {
+      return;
+    }
+
+    lastAppliedDraftRef.current = draftKey;
+    setTitle(String(draftParams.title ?? ''));
+    setDescription(String(draftParams.description ?? ''));
+    setLocationName(String(draftParams.location ?? ''));
+
+    if (draftParams.category && CATEGORIES.includes(String(draftParams.category))) {
+      setCategory(String(draftParams.category) as Category);
+    }
+
+    if (draftParams.maxParticipants) {
+      setMaxSlots(String(draftParams.maxParticipants).replace(/[^0-9]/g, '') || '8');
+    }
+
+    if (draftParams.date || draftParams.time) {
+      const [year, month, day] = String(draftParams.date ?? '').split('-').map(Number);
+      const [hour, minute] = String(draftParams.time ?? '').split(':').map(Number);
+
+      if (year && month && day) {
+        const nextDate = new Date();
+        nextDate.setFullYear(year, month - 1, day);
+        nextDate.setHours(
+          Number.isInteger(hour) ? hour : date.getHours(),
+          Number.isInteger(minute) ? minute : date.getMinutes(),
+          0,
+          0
+        );
+        setDate(nextDate);
+      }
+    }
+
+    setErrors({});
+  }, [date, draftParams]);
 
   const isValid = useMemo(
     () =>
