@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -62,7 +61,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isCategory(value: unknown): value is Activity['category'] {
+function isActivityCategory(value: unknown): value is Activity['category'] {
   return typeof value === 'string' && ACTIVITY_CATEGORIES.includes(value as Activity['category']);
 }
 
@@ -72,7 +71,7 @@ function isActivityDraft(value: unknown): value is ActivityDraft {
   return (
     typeof value.title === 'string' &&
     typeof value.description === 'string' &&
-    isCategory(value.category) &&
+    isActivityCategory(value.category) &&
     typeof value.location === 'string' &&
     typeof value.date === 'string' &&
     typeof value.time === 'string' &&
@@ -88,7 +87,7 @@ function isActivityRecommendation(value: unknown): value is ActivityRecommendati
     typeof value.activityId === 'string' &&
     typeof value.title === 'string' &&
     typeof value.reason === 'string' &&
-    isCategory(value.category) &&
+    isActivityCategory(value.category) &&
     typeof value.location === 'string' &&
     typeof value.dateTime === 'string' &&
     typeof value.availableSlots === 'number'
@@ -250,8 +249,7 @@ export default function BuddyScreen() {
   const [messages, setMessages] = useState<BuddyMessage[]>([createOpeningMessage()]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
-  const [isHistoryReady, setIsHistoryReady] = useState(false);
-  const [showClearMenu, setShowClearMenu] = useState(false);
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
   const listRef = useRef<FlatList<BuddyMessage>>(null);
 
   const canSend = input.trim().length > 0 && !isThinking;
@@ -263,7 +261,7 @@ export default function BuddyScreen() {
   useEffect(() => {
     let isActive = true;
 
-    const loadBuddyHistory = async () => {
+    const loadHistory = async () => {
       try {
         const raw = await AsyncStorage.getItem(BUDDY_HISTORY_STORAGE_KEY);
         if (!isActive) return;
@@ -280,13 +278,13 @@ export default function BuddyScreen() {
         }
       } finally {
         if (isActive) {
-          setIsHistoryReady(true);
+          setIsHistoryLoaded(true);
           scrollToEnd();
         }
       }
     };
 
-    void loadBuddyHistory();
+    void loadHistory();
 
     return () => {
       isActive = false;
@@ -294,18 +292,18 @@ export default function BuddyScreen() {
   }, [scrollToEnd]);
 
   useEffect(() => {
-    if (!isHistoryReady) return;
+    if (!isHistoryLoaded) return;
 
-    const saveBuddyHistory = async () => {
+    const saveHistory = async () => {
       try {
         await AsyncStorage.setItem(BUDDY_HISTORY_STORAGE_KEY, JSON.stringify(messages));
       } catch {
-        // Best-effort local persistence; the chat remains usable if storage is unavailable.
+        // Local history is best-effort; chat still works if storage is unavailable.
       }
     };
 
-    void saveBuddyHistory();
-  }, [isHistoryReady, messages]);
+    void saveHistory();
+  }, [isHistoryLoaded, messages]);
 
   const handleUseDraft = useCallback(
     (draft: ActivityDraft) => {
@@ -323,19 +321,6 @@ export default function BuddyScreen() {
     },
     [router]
   );
-
-  const handleClearChat = useCallback(async () => {
-    setShowClearMenu(false);
-    try {
-      await AsyncStorage.removeItem(BUDDY_HISTORY_STORAGE_KEY);
-    } catch {
-      Alert.alert('Could not clear saved chat', 'The chat was reset, but saved history may still be on this device.');
-    } finally {
-      setMessages([createOpeningMessage()]);
-      setInput('');
-      scrollToEnd();
-    }
-  }, [scrollToEnd]);
 
   const submitPrompt = useCallback(
     async (prompt: string) => {
@@ -392,20 +377,9 @@ export default function BuddyScreen() {
             <Text style={styles.subtitle}>Online</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={styles.headerButton}
-          onPress={() => setShowClearMenu((current) => !current)}
-        >
+        <TouchableOpacity style={styles.headerButton}>
           <Ionicons name="ellipsis-horizontal" size={22} color={Colors.text} />
         </TouchableOpacity>
-        {showClearMenu ? (
-          <View style={[styles.clearMenu, Shadows.card]}>
-            <TouchableOpacity style={styles.clearMenuButton} onPress={handleClearChat}>
-              <Ionicons name="trash-outline" size={16} color={Colors.danger} />
-              <Text style={styles.clearMenuText}>Clear chat</Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
       </View>
 
       <FlatList
@@ -455,7 +429,7 @@ export default function BuddyScreen() {
           <TextInput
             value={input}
             onChangeText={setInput}
-            placeholder="Message JoinUp Buddy"
+            placeholder="Type your message…"
             placeholderTextColor={Colors.slate}
             style={styles.input}
             multiline
@@ -491,7 +465,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    zIndex: 5,
   },
   headerButton: {
     width: 42,
@@ -525,30 +498,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyMed,
     fontSize: 12,
     color: Colors.success,
-  },
-  clearMenu: {
-    position: 'absolute',
-    right: Spacing.md,
-    top: 56,
-    minWidth: 150,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.sm,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    overflow: 'hidden',
-    zIndex: 10,
-  },
-  clearMenuButton: {
-    minHeight: 44,
-    paddingHorizontal: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  clearMenuText: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 13,
-    color: Colors.danger,
   },
   messageList: {
     paddingHorizontal: Spacing.lg,
