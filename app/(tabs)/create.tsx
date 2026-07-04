@@ -67,6 +67,8 @@ const isWebBlobFile = (value: unknown): value is Blob => {
   return typeof Blob !== 'undefined' && value instanceof Blob;
 };
 
+const createDefaultActivityDate = () => new Date(Date.now() + 60 * 60 * 1000);
+
 type FormErrors = {
   title?: string;
   description?: string;
@@ -115,7 +117,7 @@ export default function CreateActivityScreen() {
   const [locationName, setLocationName] = useState('');
   const [maxSlots, setMaxSlots] = useState('8');
   const [requiresApproval, setRequiresApproval] = useState(false);
-  const [date, setDate] = useState(new Date(Date.now() + 60 * 60 * 1000));
+  const [date, setDate] = useState(createDefaultActivityDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -126,6 +128,22 @@ export default function CreateActivityScreen() {
   const [errors, setErrors] = useState<FormErrors>({});
 
   const parsedMaxSlots = useMemo(() => Number.parseInt(maxSlots, 10), [maxSlots]);
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setCategory('');
+    setLocationName('');
+    setMaxSlots('8');
+    setRequiresApproval(false);
+    setDate(createDefaultActivityDate());
+    setShowDatePicker(false);
+    setPickerMode('date');
+    setSelectedImages([]);
+    setLocationCoords(null);
+    setErrors({});
+    lastAppliedDraftRef.current = null;
+  };
 
   useEffect(() => {
     const draftKey = JSON.stringify(draftParams);
@@ -489,6 +507,7 @@ export default function CreateActivityScreen() {
       }
 
       await refetch();
+      resetForm();
 
       Alert.alert('Success', 'Activity created successfully!', [
         { text: 'Open activity', onPress: () => router.push(`/activity/${data.id}`) },
