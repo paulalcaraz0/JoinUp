@@ -778,7 +778,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.card,
     padding: Spacing.md,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    ...Shadows.hairline,
   },
   participantAvatar: {
     width: 40,
@@ -806,7 +809,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.card,
     padding: Spacing.md,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    ...Shadows.hairline,
   },
   pendingHeader: {
     flexDirection: 'row',
@@ -881,6 +887,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.card,
     padding: Spacing.md,
     marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    ...Shadows.soft,
   },
   imageScrollView: {
     marginBottom: Spacing.md,
@@ -892,7 +901,7 @@ const styles = StyleSheet.create({
   galleryImage: {
     width: 120,
     height: 120,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
   },
   deleteImageBtn: {
     position: 'absolute',

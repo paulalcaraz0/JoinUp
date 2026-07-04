@@ -6,12 +6,14 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDistanceToNow, parseISO } from 'date-fns';
-import { Colors, Typography, Spacing } from '../constants/theme';
+import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { ScreenWrapper } from '../components/layout/ScreenWrapper';
 import { NavBar } from '../components/layout/NavBar';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -34,12 +36,16 @@ type NotificationRowProps = {
   item: Notification;
   index: number;
   onPress: (notification: Notification) => void;
+  onDelete: (notification: Notification) => void;
+  isDeleting: boolean;
 };
 
 const NotificationRow = React.memo(function NotificationRow({
   item,
   index,
   onPress,
+  onDelete,
+  isDeleting,
 }: NotificationRowProps) {
   const icon = ICON_MAP[item.type] ?? { name: 'notifications' as keyof typeof Ionicons.glyphMap, color: Colors.slate };
   const timeAgo = item.createdAt
@@ -50,12 +56,16 @@ const NotificationRow = React.memo(function NotificationRow({
     onPress(item);
   }, [item, onPress]);
 
-  return (
-    <Animated.View entering={FadeInDown.delay(index * 60).springify()}>
+  const handleDelete = useCallback(() => {
+    onDelete(item);
+  }, [item, onDelete]);
+
+  const row = (
       <TouchableOpacity
-        style={[styles.notifRow, !item.read && styles.notifRowUnread]}
+        style={[styles.notifRow, !item.read && styles.notifRowUnread, isDeleting && styles.notifRowDeleting]}
         onPress={handlePress}
         activeOpacity={0.7}
+        disabled={isDeleting}
       >
         <View style={[styles.iconCircle, { backgroundColor: icon.color + '18' }]}>
           <Ionicons name={icon.name} size={20} color={icon.color} />
@@ -69,6 +79,36 @@ const NotificationRow = React.memo(function NotificationRow({
         </View>
         {!item.read && <View style={styles.unreadDot} />}
       </TouchableOpacity>
+  );
+
+  const renderRightActions = () => (
+    <View style={styles.deleteActionWrap}>
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={handleDelete}
+        activeOpacity={0.82}
+        disabled={isDeleting}
+      >
+        <Ionicons name="trash-outline" size={21} color={Colors.white} />
+        <Text style={styles.deleteActionText}>{isDeleting ? 'Deleting' : 'Delete'}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 60).springify()}>
+      {item.read ? (
+        <Swipeable
+          renderRightActions={renderRightActions}
+          overshootRight={false}
+          rightThreshold={42}
+          friction={2}
+        >
+          {row}
+        </Swipeable>
+      ) : (
+        row
+      )}
     </Animated.View>
   );
 });
@@ -79,6 +119,7 @@ export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<string[]>([]);
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.uid) {
@@ -182,11 +223,38 @@ export default function NotificationsScreen() {
     }
   }, [router]);
 
+  const handleDeleteNotification = useCallback((notif: Notification) => {
+    if (!notif.read || deletingIds.includes(notif.id)) return;
+
+    setDeletingIds((prev) => [...prev, notif.id]);
+    setNotifications((prev) => prev.filter((item) => item.id !== notif.id));
+
+    void notificationService.delete(notif.id).catch((err: unknown) => {
+      setNotifications((prev) => {
+        if (prev.some((item) => item.id === notif.id)) return prev;
+        return [notif, ...prev].sort(
+          (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+        );
+      });
+
+      const message = err instanceof Error ? err.message : 'Could not delete this notification.';
+      Alert.alert('Delete failed', message);
+    }).finally(() => {
+      setDeletingIds((prev) => prev.filter((id) => id !== notif.id));
+    });
+  }, [deletingIds]);
+
   const renderNotification = useCallback(
     ({ item, index }: ListRenderItemInfo<Notification>) => (
-      <NotificationRow item={item} index={index} onPress={handleNotificationPress} />
+      <NotificationRow
+        item={item}
+        index={index}
+        onPress={handleNotificationPress}
+        onDelete={handleDeleteNotification}
+        isDeleting={deletingIds.includes(item.id)}
+      />
     ),
-    [handleNotificationPress]
+    [deletingIds, handleDeleteNotification, handleNotificationPress]
   );
 
   const renderSeparator = useCallback(() => <View style={styles.separator} />, []);
@@ -252,16 +320,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   list: {
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   notifRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.card,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    ...Shadows.hairline,
   },
   notifRowUnread: {
-    backgroundColor: Colors.accent + '08',
+    backgroundColor: Colors.accentSoft,
+    borderColor: Colors.accent + '24',
+  },
+  notifRowDeleting: {
+    opacity: 0.55,
+  },
+  deleteActionWrap: {
+    width: 92,
+    marginLeft: Spacing.sm,
+    justifyContent: 'center',
+  },
+  deleteAction: {
+    flex: 1,
+    minHeight: 74,
+    borderRadius: BorderRadius.card,
+    backgroundColor: Colors.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  deleteActionText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
   },
   iconCircle: {
     width: 42,
@@ -301,9 +397,7 @@ const styles = StyleSheet.create({
     marginLeft: Spacing.sm,
   },
   separator: {
-    height: 1,
-    backgroundColor: Colors.divider,
-    marginLeft: 42 + Spacing.md + Spacing.sm,
+    height: Spacing.sm,
   },
   markRead: {
     fontFamily: Typography.bodyMed,

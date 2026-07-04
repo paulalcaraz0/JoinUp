@@ -626,7 +626,8 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
   },
   heading: {
     fontFamily: Typography.display,
@@ -639,8 +640,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   listContent: {
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xl,
+    paddingTop: Spacing.sm,
   },
   chatItem: {
     flexDirection: 'row',
@@ -648,7 +650,9 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.card,
     padding: Spacing.md,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.divider,
   },
   chatMainPress: {
     flex: 1,
@@ -656,9 +660,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   chatIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: Spacing.md,
@@ -675,7 +679,7 @@ const styles = StyleSheet.create({
     fontFamily: Typography.body,
     fontSize: 13,
     color: Colors.slate,
-    marginTop: 2,
+    marginTop: 3,
   },
   statusPill: {
     alignSelf: 'flex-start',

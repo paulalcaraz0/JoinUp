@@ -1344,8 +1344,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   messagesList: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
     flexGrow: 1,
   },
   systemMessage: {
@@ -1414,15 +1414,17 @@ const styles = StyleSheet.create({
   bubble: {
     borderRadius: BorderRadius.card,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm + 2,
+    paddingVertical: Spacing.ms,
   },
   bubbleSent: {
     backgroundColor: Colors.accent,
-    borderBottomRightRadius: 4,
+    borderBottomRightRadius: BorderRadius.sm,
   },
   bubbleReceived: {
     backgroundColor: Colors.white,
-    borderBottomLeftRadius: 4,
+    borderBottomLeftRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.divider,
   },
   bubbleText: {
     fontFamily: Typography.body,
@@ -1445,7 +1447,7 @@ const styles = StyleSheet.create({
   imageMessage: {
     width: 220,
     height: 220,
-    borderRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.md,
     marginBottom: 4,
   },
   imageUnavailableWrap: {
@@ -1480,8 +1482,8 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: Spacing.sm,
-    paddingTop: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.ms,
     backgroundColor: Colors.white,
     borderTopWidth: 1,
     borderTopColor: Colors.divider,
@@ -1498,6 +1500,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
     backgroundColor: Colors.cream,
+    borderWidth: 1,
+    borderColor: Colors.divider,
     borderRadius: BorderRadius.pill,
     paddingHorizontal: Spacing.md,
     paddingVertical: 10,
@@ -1522,6 +1526,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   sendBtnDisabled: {
-    backgroundColor: Colors.divider,
+    backgroundColor: Colors.slate,
+    opacity: 0.45,
   },
 });

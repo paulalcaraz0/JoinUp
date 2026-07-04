@@ -274,6 +274,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xl * 2,
+    paddingTop: Spacing.md,
   },
   heading: {
     fontFamily: Typography.display,
@@ -284,14 +285,17 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: Typography.body,
     fontSize: 15,
-    color: Colors.slate,
+    color: Colors.textSecondary,
     marginBottom: Spacing.lg,
+    lineHeight: 21,
   },
   errorBanner: {
     backgroundColor: Colors.danger + '15',
-    borderRadius: 8,
+    borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.danger + '26',
   },
   errorBannerText: {
     fontFamily: Typography.body,
@@ -300,9 +304,11 @@ const styles = StyleSheet.create({
   },
   infoBanner: {
     backgroundColor: Colors.accent + '15',
-    borderRadius: 8,
+    borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.accent + '24',
   },
   infoBannerText: {
     fontFamily: Typography.body,
@@ -310,14 +316,14 @@ const styles = StyleSheet.create({
     color: Colors.accent,
   },
   fieldLabel: {
-    fontFamily: Typography.bodyMed,
-    fontSize: 14,
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
     color: Colors.text,
     marginBottom: Spacing.sm,
   },
   dropdown: {
     backgroundColor: Colors.white,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Colors.divider,
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.md,
@@ -334,7 +340,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     backgroundColor: Colors.white,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Colors.divider,
     borderRadius: BorderRadius.input,
     marginTop: -Spacing.sm,

@@ -78,7 +78,7 @@ function isThisWeekend(dateTime: string, now: Date) {
   return date >= saturday && date <= sunday;
 }
 
-function joinedCount(activity: any) {
+function joinedCount(activity: Pick<Activity, 'maxSlots' | 'currentSlots'>) {
   return Math.max(0, activity.maxSlots - activity.currentSlots);
 }
 
@@ -628,18 +628,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.divider,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: 4,
   },
   tab: {
     flex: 1,
-    paddingVertical: Spacing.md,
+    paddingVertical: 10,
     alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    borderRadius: BorderRadius.pill,
   },
   tabActive: {
-    borderBottomColor: Colors.accent,
+    backgroundColor: Colors.primary,
   },
   tabText: {
     fontFamily: Typography.bodyMed,
@@ -647,7 +649,7 @@ const styles = StyleSheet.create({
     color: Colors.slate,
   },
   tabTextActive: {
-    color: Colors.accent,
+    color: Colors.white,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -659,6 +661,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.divider,
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.md,
+    ...Shadows.hairline,
   },
   searchIcon: {
     marginRight: Spacing.sm,
@@ -753,14 +756,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: Typography.display,
     fontSize: 22,
-    color: Colors.accent,
+    color: Colors.text,
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
   },
   sectionTitleNoMargin: {
     fontFamily: Typography.display,
     fontSize: 22,
-    color: Colors.accent,
+    color: Colors.text,
   },
   peopleHeader: {
     marginHorizontal: Spacing.lg,
@@ -833,6 +836,8 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.divider,
   },
   coverImage: {
     height: 160,
@@ -864,7 +869,7 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   cardInfo: {
-    padding: Spacing.md,
+    padding: Spacing.lg,
   },
   cardInfoTop: {
     flexDirection: 'row',
@@ -917,7 +922,7 @@ const styles = StyleSheet.create({
   },
   userCard: {
     backgroundColor: Colors.white,
-    borderRadius: 14,
+    borderRadius: BorderRadius.card,
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
     padding: Spacing.md,
@@ -932,7 +937,7 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 4,
+    width: 3,
     backgroundColor: Colors.accent,
   },
   userPhotoContainer: {

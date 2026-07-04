@@ -44,6 +44,15 @@ export const notificationService = {
     if (error) throw error;
   },
 
+  async delete(notificationId: string) {
+    const { error } = await supabase
+      .from(DatabaseTables.notifications)
+      .delete()
+      .eq('id', notificationId);
+
+    if (error) throw error;
+  },
+
   async insert(payload: {
     user_id: string;
     type: string;

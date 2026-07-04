@@ -8,7 +8,7 @@ import {
   TextInputProps,
   TouchableOpacity,
 } from 'react-native';
-import { Colors, Typography, BorderRadius, Spacing, Shadows } from '../../constants/theme';
+import { Colors, Typography, BorderRadius, Spacing } from '../../constants/theme';
 
 interface InputFieldProps extends TextInputProps {
   label: string;
@@ -54,10 +54,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   label: {
-    fontFamily: Typography.bodyMed,
+    fontFamily: Typography.bodyBold,
     fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: Spacing.xs,
+    color: Colors.text,
+    marginBottom: 7,
   },
   inputRow: {
     position: 'relative',
@@ -68,20 +68,19 @@ const styles = StyleSheet.create({
     borderColor: Colors.divider,
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.md,
-    paddingVertical: 14,
+    paddingVertical: 13,
     paddingRight: 48,
     fontFamily: Typography.body,
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.text,
-    minHeight: 48,
-    ...Shadows.soft,
+    minHeight: 50,
   },
   inputWithAccessory: {
     paddingRight: 48,
   },
   inputFocused: {
     borderColor: Colors.accent,
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: Colors.white,
   },
   inputError: {
     borderColor: Colors.danger,

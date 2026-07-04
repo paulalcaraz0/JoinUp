@@ -3,13 +3,16 @@ import { Platform } from 'react-native';
 /* ── Brand tokens ─────────────────────────────────────────── */
 export const Colors = {
   primary: '#152238',
+  primarySoft: '#243653',
   accent: '#FF6B35',
+  accentSoft: '#FFF0EA',
   peach: '#F7C59F',
   cream: '#F7F8FA',
   white: '#FFFFFF',
   surface: '#FFFFFF',
   surfaceElevated: '#FFFCFA',
   mutedSurface: '#EEF2F7',
+  inkMuted: '#EEF3F8',
   slate: '#8A96A8',
   text: '#152238',
   textSecondary: '#526173',
@@ -32,6 +35,7 @@ export const Typography = {
 export const Spacing = {
   xs: 4,
   sm: 8,
+  ms: 12,
   md: 16,
   lg: 24,
   xl: 32,
@@ -41,7 +45,8 @@ export const Spacing = {
 
 export const BorderRadius = {
   sm: 8,
-  card: 12,
+  md: 12,
+  card: 16,
   pill: 24,
   full: 9999,
   input: 14,
@@ -50,27 +55,39 @@ export const BorderRadius = {
 } as const;
 
 export const Shadows = {
-  card: Platform.select({
+  hairline: Platform.select({
     web: {
-      boxShadow: '0px 10px 24px rgba(21, 34, 56, 0.10)',
+      boxShadow: '0px 1px 2px rgba(21, 34, 56, 0.04)',
     },
     default: {
       shadowColor: '#152238',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.10,
-      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.04,
+      shadowRadius: 2,
+      elevation: 1,
+    },
+  }),
+  card: Platform.select({
+    web: {
+      boxShadow: '0px 12px 28px rgba(21, 34, 56, 0.09)',
+    },
+    default: {
+      shadowColor: '#152238',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.09,
+      shadowRadius: 20,
       elevation: 5,
     },
   }),
   soft: Platform.select({
     web: {
-      boxShadow: '0px 6px 16px rgba(21, 34, 56, 0.07)',
+      boxShadow: '0px 8px 18px rgba(21, 34, 56, 0.06)',
     },
     default: {
       shadowColor: '#152238',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.06,
+      shadowRadius: 14,
       elevation: 3,
     },
   }),

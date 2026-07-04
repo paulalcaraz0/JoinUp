@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing } from '../../constants/theme';
+import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
 import { InputField } from '../../components/ui/InputField';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { SecondaryButton } from '../../components/ui/SecondaryButton';
@@ -178,6 +178,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xl * 2,
+    paddingTop: Spacing.md,
   },
   backBtn: {
     marginBottom: Spacing.lg,
@@ -197,14 +198,17 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: Typography.body,
     fontSize: 15,
-    color: Colors.slate,
+    color: Colors.textSecondary,
     marginBottom: Spacing.lg,
+    lineHeight: 21,
   },
   errorBanner: {
     backgroundColor: Colors.danger + '15',
-    borderRadius: 8,
+    borderRadius: BorderRadius.md,
     padding: Spacing.md,
     marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.danger + '26',
   },
   errorText: {
     fontFamily: Typography.body,

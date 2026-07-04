@@ -20,7 +20,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { readAsStringAsync } from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import * as Location from 'expo-location';
-import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
+import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { InputField } from '../../components/ui/InputField';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { CategoryChip } from '../../components/ui/CategoryChip';
@@ -716,6 +716,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xl * 3,
+    paddingTop: Spacing.sm,
   },
   heading: {
     fontFamily: Typography.display,
@@ -726,17 +727,19 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: Typography.body,
     fontSize: 15,
-    color: Colors.slate,
+    color: Colors.textSecondary,
     marginBottom: Spacing.lg,
+    lineHeight: 21,
   },
   imagesSection: {
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.card,
-    borderWidth: 2,
-    borderColor: Colors.divider,
+    borderWidth: 1,
+    borderColor: Colors.accent + '22',
     borderStyle: 'dashed',
-    padding: Spacing.md,
+    padding: Spacing.lg,
     marginBottom: Spacing.lg,
+    ...Shadows.soft,
   },
   imageScrollView: {
     marginBottom: Spacing.md,
@@ -746,9 +749,9 @@ const styles = StyleSheet.create({
     marginRight: Spacing.md,
   },
   selectedImage: {
-    width: 100,
-    height: 100,
-    borderRadius: BorderRadius.sm,
+    width: 112,
+    height: 112,
+    borderRadius: BorderRadius.md,
   },
   removeImageBtn: {
     position: 'absolute',
@@ -761,7 +764,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     gap: Spacing.sm,
   },
   addImageText: {
@@ -770,8 +773,8 @@ const styles = StyleSheet.create({
     color: Colors.accent,
   },
   fieldLabel: {
-    fontFamily: Typography.bodyMed,
-    fontSize: 14,
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
     color: Colors.text,
     marginBottom: Spacing.sm,
   },
@@ -802,7 +805,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.input,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: Colors.divider,
     paddingHorizontal: Spacing.md,
     paddingVertical: 14,
@@ -826,11 +829,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: Colors.white,
-    borderRadius: BorderRadius.input,
+    borderRadius: BorderRadius.card,
     padding: Spacing.md,
     marginBottom: Spacing.lg,
     borderWidth: 1,
     borderColor: Colors.divider,
+    ...Shadows.hairline,
   },
   switchInfo: {
     flex: 1,
@@ -849,5 +853,6 @@ const styles = StyleSheet.create({
   },
   submitBtn: {
     marginTop: Spacing.sm,
+    marginBottom: Spacing.xl,
   },
 });

@@ -55,17 +55,18 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: Colors.accent,
     borderRadius: BorderRadius.button,
-    paddingVertical: Spacing.md,
+    paddingVertical: 14,
     paddingHorizontal: Spacing.xl,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    minHeight: 54,
     gap: Spacing.sm,
     ...Shadows.fab,
   },
   disabled: {
-    opacity: 0.5,
+    backgroundColor: Colors.slate,
+    opacity: 0.55,
   },
   text: {
     color: Colors.white,

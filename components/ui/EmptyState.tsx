@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native';
-import { Colors, Typography, Spacing } from '../../constants/theme';
+import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 interface EmptyStateProps {
@@ -43,19 +43,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
     paddingVertical: Spacing.xl * 2,
+    backgroundColor: 'transparent',
   },
   iconWrap: {
     width: 76,
     height: 76,
-    borderRadius: 38,
+    borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.accent + '12',
+    backgroundColor: Colors.accentSoft,
     marginBottom: Spacing.md,
   },
   title: {
     fontFamily: Typography.bodyBold,
-    fontSize: 18,
+    fontSize: 19,
     color: Colors.text,
     marginBottom: Spacing.sm,
     textAlign: 'center',
@@ -70,8 +71,8 @@ const styles = StyleSheet.create({
   actionBtn: {
     marginTop: Spacing.md,
     paddingHorizontal: Spacing.lg,
-    paddingVertical: 10,
-    borderRadius: 999,
+    paddingVertical: 11,
+    borderRadius: BorderRadius.pill,
     backgroundColor: Colors.accent,
   },
   actionText: {

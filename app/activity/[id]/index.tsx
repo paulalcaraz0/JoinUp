@@ -358,14 +358,18 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: 120,
+    paddingTop: Spacing.sm,
   },
   imageGallery: {
     height: 250,
     backgroundColor: Colors.primary + '12',
-    marginHorizontal: Spacing.md,
+    marginHorizontal: Spacing.lg,
     borderRadius: BorderRadius.card,
     overflow: 'hidden',
     position: 'relative',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    ...Shadows.soft,
   },
   imageCarousel: {
     width: '100%',
@@ -423,10 +427,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: Typography.display,
-    fontSize: 24,
+    fontSize: 26,
     color: Colors.text,
     marginHorizontal: Spacing.lg,
-    marginTop: Spacing.sm,
+    marginTop: Spacing.md,
+    lineHeight: 32,
   },
   hostRow: {
     flexDirection: 'row',
@@ -456,6 +461,12 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.lg,
     marginTop: Spacing.lg,
     gap: Spacing.md,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.card,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: Spacing.md,
+    ...Shadows.hairline,
   },
   infoRow: {
     flexDirection: 'row',
@@ -484,6 +495,11 @@ const styles = StyleSheet.create({
   descSection: {
     marginHorizontal: Spacing.lg,
     marginTop: Spacing.lg,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.card,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: Spacing.md,
   },
   sectionTitle: {
     fontFamily: Typography.bodyBold,
@@ -500,6 +516,11 @@ const styles = StyleSheet.create({
   participantsSection: {
     marginHorizontal: Spacing.lg,
     marginTop: Spacing.lg,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.card,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    padding: Spacing.md,
   },
   participantsRow: {
     flexDirection: 'row',
@@ -544,6 +565,8 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.divider,
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
+    borderTopLeftRadius: BorderRadius.sheet,
+    borderTopRightRadius: BorderRadius.sheet,
     ...Shadows.card,
   },
   bottomActions: {

@@ -261,8 +261,12 @@ function extractTitle(text: string, category: Activity['category']) {
   return defaults[category];
 }
 
-function looksLikeTimeOrDate(value: string) {
-  return TIME_PATTERN.test(value) || /^(?:later|today|tomorrow|this|weekend|morning|afternoon|evening|night)\b/i.test(value);
+function startsLikeTimeOrDate(value: string) {
+  return (
+    /^(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)\b/i.test(value) ||
+    /^(?:[01]?\d|2[0-3]):[0-5]\d\b/i.test(value) ||
+    /^(?:later|today|tomorrow|this|weekend|morning|afternoon|evening|night)\b/i.test(value)
+  );
 }
 
 function cleanLocationCandidate(value: string) {
@@ -278,14 +282,14 @@ function extractLocation(text: string) {
   for (const match of matches) {
     const start = (match.index ?? 0) + match[0].length;
     const remaining = text.slice(start);
-    if (looksLikeTimeOrDate(remaining)) continue;
+    if (startsLikeTimeOrDate(remaining)) continue;
 
     const boundary = remaining.search(
       /\s+(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)\b|\s+(?:[01]?\d|2[0-3]):[0-5]\d\b|\s+\b(?:later|today|tomorrow|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|morning|afternoon|evening|night|for|with|limit|maximum|max)\b/i
     );
     const candidate = cleanLocationCandidate(boundary >= 0 ? remaining.slice(0, boundary) : remaining);
 
-    if (candidate && !looksLikeTimeOrDate(candidate) && !/^\d+\s*(?:people|participants|pax|members)?$/i.test(candidate)) {
+    if (candidate && !startsLikeTimeOrDate(candidate) && !/^\d+\s*(?:people|participants|pax|members)?$/i.test(candidate)) {
       return candidate;
     }
   }
@@ -453,13 +457,13 @@ export async function sendBuddyMessage(
   }
 
   const category = inferCategory(prompt);
-  const draftPrompt = `Create a ${category} activity based on: ${prompt}`;
-  const followUp = followUpForMissingDetails(missingDraftDetails(draftPrompt));
+  const followUp = followUpForMissingDetails(missingDraftDetails(prompt));
   if (followUp) {
     const message = assistantMessage(followUp);
     return { message };
   }
 
+  const draftPrompt = `Create a ${category} activity based on: ${prompt}`;
   const draft = generateActivityDraftFromText(draftPrompt);
   const message = assistantMessage(
     `I could not find a strong existing match. You could create a ${category.toLowerCase()} activity instead.`,
