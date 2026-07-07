@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   ScrollView,
@@ -12,11 +12,13 @@ import {
   Pressable,
   TextInput,
   Platform,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOutUp, LinearTransition } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../../constants/theme';
 import { NavBar } from '../../components/layout/NavBar';
@@ -124,6 +126,10 @@ export default function ExploreScreen() {
   const [selectedDiscoveryFilter, setSelectedDiscoveryFilter] = useState<DiscoveryFilter>('All');
   const [eventSearchQuery, setEventSearchQuery] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [showEventDiscovery, setShowEventDiscovery] = useState(true);
+  const [showPeopleDiscovery, setShowPeopleDiscovery] = useState(true);
+  const lastEventScrollY = useRef(0);
+  const lastPeopleScrollY = useRef(0);
 
   const selectedPlaceOption = useMemo(
     () => PHILIPPINE_PLACES.find((place) => place.label === selectedPlace) ?? PHILIPPINE_PLACES[0],
@@ -260,106 +266,179 @@ export default function ExploreScreen() {
   );
 
   const renderUserItem = useCallback(
-    ({ item: profile, index }: { item: User; index: number }) => (
-      <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
-        <TouchableOpacity
-          style={[styles.userCard, Shadows.card]}
-          onPress={() => router.push(`/users/${profile.uid}`)}
-          activeOpacity={0.92}
-        >
-          <View style={styles.userAccentBar} />
-          <View style={styles.userPhotoContainer}>
-            {profile.photoURL ? (
-              <Image
-                source={{ uri: profile.photoURL }}
-                style={styles.userPhoto}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.userPhotoPlaceholder}>
-                <Text style={styles.userInitial}>
-                  {(profile.displayName || 'A').trim().charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </View>
+    ({ item: profile, index }: { item: User; index: number }) => {
+      const primaryInterest = profile.interests[0] ?? 'Open to join';
+      const initials = (profile.displayName || 'A').trim().charAt(0).toUpperCase();
 
-          <View style={styles.userInfo}>
-            <View style={styles.userHeader}>
-              <View style={styles.userTitleBlock}>
-                <Text style={styles.userName} numberOfLines={1}>
-                  {profile.displayName || 'Anonymous'}
-                </Text>
-                <View style={styles.userMetaRow}>
-                  {profile.verificationStatus === 'verified' ? (
-                    <View style={styles.verifiedPill}>
-                      <Ionicons name="shield-checkmark" size={12} color={Colors.success} />
-                      <Text style={styles.verifiedText}>Verified ID</Text>
-                    </View>
-                  ) : null}
-                  {profile.location ? (
-                    <View style={styles.userMetaPill}>
-                      <Ionicons name="location-outline" size={12} color={Colors.textSecondary} />
-                      <Text style={styles.userMetaText} numberOfLines={1}>
-                        {profile.location}
-                      </Text>
-                    </View>
-                  ) : null}
-                  <View style={styles.userMetaPill}>
-                    <Ionicons name="person-outline" size={12} color={Colors.textSecondary} />
-                    <Text style={styles.userMetaText}>{profile.ageRange}</Text>
-                  </View>
+      return (
+        <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
+          <TouchableOpacity
+            style={[styles.userCard, Shadows.card]}
+            onPress={() => router.push(`/users/${profile.uid}`)}
+            activeOpacity={0.92}
+          >
+            <View style={styles.userImagePanel}>
+              {profile.photoURL ? (
+                <Image
+                  source={{ uri: profile.photoURL }}
+                  style={styles.userPhotoFull}
+                  resizeMode="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={[Colors.primarySoft, Colors.primary, '#0D1628']}
+                  style={styles.userImagePlaceholder}
+                >
+                  <Text style={styles.userInitial}>{initials}</Text>
+                </LinearGradient>
+              )}
+              <LinearGradient
+                colors={['rgba(21, 34, 56, 0)', 'rgba(21, 34, 56, 0.24)']}
+                style={styles.userImageGradient}
+              />
+            </View>
+
+            <View style={styles.userDetailsPanel}>
+              <View style={styles.userTopLine}>
+                <View style={styles.userTitleBlock}>
+                  <Text style={styles.userName} numberOfLines={1}>
+                    {profile.displayName || 'Anonymous'}
+                  </Text>
+                  <Text style={styles.userPrimaryInterest} numberOfLines={1}>
+                    {primaryInterest}
+                  </Text>
+                </View>
+                <View style={styles.ratingContainer}>
+                  <Ionicons name="star" size={13} color={Colors.accent} />
+                  <Text style={styles.ratingText}>
+                    {profile.ratingCount > 0 ? profile.rating.toFixed(1) : 'New'}
+                  </Text>
                 </View>
               </View>
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={13} color={Colors.accent} />
-                <Text style={styles.ratingText}>
-                  {profile.ratingCount > 0 ? profile.rating.toFixed(1) : 'New'}
-                </Text>
-              </View>
-            </View>
 
-            {profile.bio ? (
-              <Text style={styles.userBio} numberOfLines={2}>
-                {profile.bio}
-              </Text>
-            ) : null}
-
-            {profile.interests.length > 0 ? (
-              <View style={styles.interestsContainer}>
-                {profile.interests.slice(0, 3).map((interest) => (
-                  <View key={interest} style={styles.interestTag}>
-                    <Text style={styles.interestText}>{interest}</Text>
+              <View style={styles.userMetaRow}>
+                {profile.verificationStatus === 'verified' ? (
+                  <View style={styles.verifiedPill}>
+                    <Ionicons name="shield-checkmark" size={12} color={Colors.success} />
+                    <Text style={styles.verifiedText}>Verified</Text>
                   </View>
-                ))}
-                {profile.interests.length > 3 ? (
-                  <Text style={styles.moreInterests}>+{profile.interests.length - 3}</Text>
                 ) : null}
+                {profile.location ? (
+                  <View style={styles.userMetaPill}>
+                    <Ionicons name="location-outline" size={12} color={Colors.slate} />
+                    <Text style={styles.userMetaText} numberOfLines={1}>
+                      {profile.location}
+                    </Text>
+                  </View>
+                ) : null}
+                <View style={styles.userMetaPill}>
+                  <Ionicons name="person-outline" size={12} color={Colors.slate} />
+                  <Text style={styles.userMetaText}>{profile.ageRange}</Text>
+                </View>
               </View>
-            ) : (
-              <Text style={styles.userBio} numberOfLines={1}>
-                No interests added yet
-              </Text>
-            )}
 
-            <View style={styles.userFooter}>
-              <View style={styles.joinedMiniStat}>
-                <Ionicons name="calendar-outline" size={13} color={Colors.slate} />
-                <Text style={styles.joinedMiniText}>
-                  {profile.activitiesJoined.length} joined
-                </Text>
-              </View>
-              <View style={styles.viewProfilePill}>
-                <Text style={styles.viewProfileText}>View profile</Text>
-                <Ionicons name="chevron-forward" size={14} color={Colors.accent} />
+              <Text style={styles.userBio} numberOfLines={1}>
+                {profile.bio || 'Ready to discover activities on JoinUp.'}
+              </Text>
+
+              <View style={styles.userFooter}>
+                <View style={styles.joinedMiniStat}>
+                  <Ionicons name="calendar-outline" size={13} color={Colors.slate} />
+                  <Text style={styles.joinedMiniText}>
+                    {profile.activitiesJoined.length} joined
+                  </Text>
+                </View>
+                <View style={styles.viewProfilePill}>
+                  <Text style={styles.viewProfileText}>View</Text>
+                  <Ionicons name="chevron-forward" size={14} color={Colors.primary} />
+                </View>
               </View>
             </View>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
-    ),
+          </TouchableOpacity>
+        </Animated.View>
+      );
+    },
     [router]
   );
+
+  const handleEventScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const delta = y - lastEventScrollY.current;
+
+    if (y <= 8) {
+      setShowEventDiscovery(true);
+    } else if (delta > 8) {
+      setShowEventDiscovery(false);
+    } else if (delta < -8) {
+      setShowEventDiscovery(true);
+    }
+
+    lastEventScrollY.current = y;
+  }, []);
+
+  const renderPeopleDiscoveryHeader = useCallback(
+    () => (
+      <View style={styles.peopleDiscoveryHeader}>
+        <View style={[styles.searchContainer, styles.searchStandalone, styles.peopleSearchContainer]}>
+          <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, styles.peopleSearchInput]}
+            placeholder="Search by name or interests"
+            placeholderTextColor={Colors.slate}
+            value={userSearchQuery}
+            onChangeText={setUserSearchQuery}
+          />
+          {userSearchQuery ? (
+            <TouchableOpacity onPress={() => setUserSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={Colors.slate} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        <LinearGradient
+          colors={[Colors.white, Colors.surfaceElevated]}
+          style={styles.peopleHeader}
+        >
+          <View>
+            <Text style={styles.sectionTitleNoMargin}>Discover People</Text>
+            <Text style={styles.peopleSubtitle}>
+              {peopleSummary.userCount} {peopleSummary.userCount === 1 ? 'member' : 'members'} ready to join activities
+            </Text>
+          </View>
+          <View style={styles.peopleHeaderIcon}>
+            <Ionicons name="people" size={20} color={Colors.primary} />
+          </View>
+        </LinearGradient>
+
+        {peopleSummary.topInterests.length > 0 ? (
+          <View style={styles.trendingRow}>
+            <Text style={styles.trendingLabel}>Popular</Text>
+            {peopleSummary.topInterests.map((interest) => (
+              <View key={interest} style={styles.trendingChip}>
+                <Text style={styles.trendingChipText}>{interest}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    ),
+    [peopleSummary, userSearchQuery]
+  );
+
+  const handlePeopleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = event.nativeEvent.contentOffset.y;
+    const delta = y - lastPeopleScrollY.current;
+
+    if (y <= 8) {
+      setShowPeopleDiscovery(true);
+    } else if (delta > 8) {
+      setShowPeopleDiscovery(false);
+    } else if (delta < -8) {
+      setShowPeopleDiscovery(true);
+    }
+
+    lastPeopleScrollY.current = y;
+  }, []);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -377,7 +456,12 @@ export default function ExploreScreen() {
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, viewMode === 'events' && styles.tabActive]}
-          onPress={() => setViewMode('events')}
+          onPress={() => {
+            setShowPlaceDropdown(false);
+            setShowEventDiscovery(true);
+            lastEventScrollY.current = 0;
+            setViewMode('events');
+          }}
         >
           <Text style={[styles.tabText, viewMode === 'events' && styles.tabTextActive]}>Events</Text>
         </TouchableOpacity>
@@ -385,6 +469,8 @@ export default function ExploreScreen() {
           style={[styles.tab, viewMode === 'users' && styles.tabActive]}
           onPress={() => {
             setShowPlaceDropdown(false);
+            setShowPeopleDiscovery(true);
+            lastPeopleScrollY.current = 0;
             setViewMode('users');
           }}
         >
@@ -399,117 +485,113 @@ export default function ExploreScreen() {
         />
       ) : null}
 
-      {viewMode === 'events' ? (
-        <View style={styles.eventSearchWrap}>
-          <View style={styles.eventSearchRow}>
-            <View style={[styles.searchContainer, styles.searchInline]}>
-              <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search events by title or location"
-                placeholderTextColor={Colors.slate}
-                value={eventSearchQuery}
-                onChangeText={setEventSearchQuery}
-              />
-              {eventSearchQuery ? (
-                <TouchableOpacity onPress={() => setEventSearchQuery('')}>
-                  <Ionicons name="close-circle" size={18} color={Colors.slate} />
-                </TouchableOpacity>
-              ) : null}
+      {viewMode === 'events' && showEventDiscovery ? (
+        <Animated.View
+          entering={FadeInDown.duration(180)}
+          exiting={FadeOutUp.duration(160)}
+          layout={LinearTransition.duration(180)}
+        >
+          <View style={styles.eventSearchWrap}>
+            <View style={styles.eventSearchRow}>
+              <View style={[styles.searchContainer, styles.searchInline]}>
+                <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search events by title or location"
+                  placeholderTextColor={Colors.slate}
+                  value={eventSearchQuery}
+                  onChangeText={setEventSearchQuery}
+                />
+                {eventSearchQuery ? (
+                  <TouchableOpacity onPress={() => setEventSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={Colors.slate} />
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              <TouchableOpacity
+                style={[styles.locationFilterButton, showPlaceDropdown && styles.locationFilterButtonActive]}
+                activeOpacity={0.85}
+                onPress={() => setShowPlaceDropdown((prev) => !prev)}
+              >
+                <Ionicons
+                  name="options-outline"
+                  size={20}
+                  color={showPlaceDropdown ? Colors.white : Colors.primary}
+                />
+              </TouchableOpacity>
             </View>
+
+            {showPlaceDropdown ? (
+              <View style={[styles.placeDropdown, Shadows.card]}>
+                {PHILIPPINE_PLACES.map((place) => {
+                  const active = place.label === selectedPlace;
+                  return (
+                    <TouchableOpacity
+                      key={place.label}
+                      style={[styles.placeItem, active && styles.placeItemActive]}
+                      onPress={() => {
+                        setSelectedPlace(place.label);
+                        setShowPlaceDropdown(false);
+                      }}
+                    >
+                      <Text style={[styles.placeItemText, active && styles.placeItemTextActive]}>{place.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
+        </Animated.View>
+      ) : null}
+
+      {viewMode === 'events' && showEventDiscovery ? (
+        <Animated.View
+          entering={FadeInDown.duration(180)}
+          exiting={FadeOutUp.duration(160)}
+          layout={LinearTransition.duration(180)}
+        >
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.quickFilterScroll}
+            contentContainerStyle={styles.quickFilterRow}
+          >
             <TouchableOpacity
-              style={[styles.locationFilterButton, showPlaceDropdown && styles.locationFilterButtonActive]}
+              style={[
+                styles.locationPill,
+                selectedPlace !== 'All Philippines' && styles.locationPillActive,
+              ]}
               activeOpacity={0.85}
               onPress={() => setShowPlaceDropdown((prev) => !prev)}
             >
               <Ionicons
-                name="options-outline"
-                size={20}
-                color={showPlaceDropdown ? Colors.white : Colors.primary}
+                name="location"
+                size={15}
+                color={selectedPlace !== 'All Philippines' ? Colors.white : Colors.success}
               />
+              <Text
+                style={[
+                  styles.locationText,
+                  selectedPlace !== 'All Philippines' && styles.locationTextActive,
+                ]}
+                numberOfLines={1}
+              >
+                {selectedPlace}
+              </Text>
             </TouchableOpacity>
-          </View>
-
-          {showPlaceDropdown ? (
-            <View style={[styles.placeDropdown, Shadows.card]}>
-              {PHILIPPINE_PLACES.map((place) => {
-                const active = place.label === selectedPlace;
-                return (
-                  <TouchableOpacity
-                    key={place.label}
-                    style={[styles.placeItem, active && styles.placeItemActive]}
-                    onPress={() => {
-                      setSelectedPlace(place.label);
-                      setShowPlaceDropdown(false);
-                    }}
-                  >
-                    <Text style={[styles.placeItemText, active && styles.placeItemTextActive]}>{place.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <View style={[styles.searchContainer, styles.searchStandalone]}>
-          <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by name or interests"
-            placeholderTextColor={Colors.slate}
-            value={userSearchQuery}
-            onChangeText={setUserSearchQuery}
-          />
-          {userSearchQuery ? (
-            <TouchableOpacity onPress={() => setUserSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color={Colors.slate} />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      )}
-
-      {viewMode === 'events' ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.quickFilterScroll}
-          contentContainerStyle={styles.quickFilterRow}
-        >
-          <TouchableOpacity
-            style={[
-              styles.locationPill,
-              selectedPlace !== 'All Philippines' && styles.locationPillActive,
-            ]}
-            activeOpacity={0.85}
-            onPress={() => setShowPlaceDropdown((prev) => !prev)}
-          >
-            <Ionicons
-              name="location"
-              size={15}
-              color={selectedPlace !== 'All Philippines' ? Colors.white : Colors.success}
-            />
-            <Text
-              style={[
-                styles.locationText,
-                selectedPlace !== 'All Philippines' && styles.locationTextActive,
-              ]}
-              numberOfLines={1}
-            >
-              {selectedPlace}
-            </Text>
-          </TouchableOpacity>
-          {DiscoveryFilters.map((filter) => (
-            <View key={filter} style={styles.quickFilterCell}>
-              <CategoryChip
-                label={filter}
-                selected={selectedDiscoveryFilter === filter}
-                onPress={() => setSelectedDiscoveryFilter(filter)}
-                size="sm"
-                style={styles.discoveryFilterChip}
-              />
-            </View>
-          ))}
-        </ScrollView>
+            {DiscoveryFilters.map((filter) => (
+              <View key={filter} style={styles.quickFilterCell}>
+                <CategoryChip
+                  label={filter}
+                  selected={selectedDiscoveryFilter === filter}
+                  onPress={() => setSelectedDiscoveryFilter(filter)}
+                  size="sm"
+                  style={styles.discoveryFilterChip}
+                />
+              </View>
+            ))}
+          </ScrollView>
+        </Animated.View>
       ) : null}
 
       {viewMode === 'events' ? (
@@ -546,6 +628,8 @@ export default function ExploreScreen() {
               data={filteredActivities}
               keyExtractor={(item) => item.id}
               renderItem={renderActivityItem}
+              onScroll={handleEventScroll}
+              scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.listContent,
@@ -561,59 +645,54 @@ export default function ExploreScreen() {
         </View>
       ) : (
         <View style={styles.listShell}>
-          <View style={styles.peopleHeader}>
-            <View>
-              <Text style={styles.sectionTitleNoMargin}>Discover People</Text>
-              <Text style={styles.peopleSubtitle}>
-                {peopleSummary.userCount} {peopleSummary.userCount === 1 ? 'member' : 'members'} ready to join activities
-              </Text>
-            </View>
-            <View style={styles.peopleHeaderIcon}>
-              <Ionicons name="people" size={22} color={Colors.accent} />
-            </View>
-          </View>
-
-          {peopleSummary.topInterests.length > 0 ? (
-            <View style={styles.trendingRow}>
-              <Text style={styles.trendingLabel}>Popular</Text>
-              {peopleSummary.topInterests.map((interest) => (
-                <View key={interest} style={styles.trendingChip}>
-                  <Text style={styles.trendingChipText}>{interest}</Text>
-                </View>
-              ))}
-            </View>
+          {showPeopleDiscovery ? (
+            <Animated.View
+              entering={FadeInDown.duration(180)}
+              exiting={FadeOutUp.duration(160)}
+              layout={LinearTransition.duration(180)}
+            >
+              {renderPeopleDiscoveryHeader()}
+            </Animated.View>
           ) : null}
 
           {usersLoading && users.length === 0 ? (
-            <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+            <>
+              <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+            </>
           ) : usersError && users.length === 0 ? (
-            <EmptyState
-              icon="alert-circle-outline"
-              title="Could not load people"
-              message={usersError}
-              actionLabel="Try again"
-              onAction={() => {
-                void refetchUsers();
-              }}
-              style={styles.inlineEmptyState}
-            />
+            <>
+              <EmptyState
+                icon="alert-circle-outline"
+                title="Could not load people"
+                message={usersError}
+                actionLabel="Try again"
+                onAction={() => {
+                  void refetchUsers();
+                }}
+                style={styles.inlineEmptyState}
+              />
+            </>
           ) : filteredUsers.length === 0 ? (
-            <EmptyState
-              icon="people-outline"
-              title="No people found"
-              message={userSearchQuery ? 'No users found matching your search.' : 'No users available yet.'}
-              actionLabel="Refresh"
-              onAction={() => {
-                void refetchUsers();
-              }}
-              style={styles.inlineEmptyState}
-            />
+            <>
+              <EmptyState
+                icon="people-outline"
+                title="No people found"
+                message={userSearchQuery ? 'No users found matching your search.' : 'No users available yet.'}
+                actionLabel="Refresh"
+                onAction={() => {
+                  void refetchUsers();
+                }}
+                style={styles.inlineEmptyState}
+              />
+            </>
           ) : (
             <FlatList
               style={styles.list}
               data={filteredUsers}
               keyExtractor={(item) => item.uid}
               renderItem={renderUserItem}
+              onScroll={handlePeopleScroll}
+              scrollEventThrottle={16}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={[
                 styles.listContent,
@@ -638,24 +717,29 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.cream,
   },
   filterBtn: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
   },
   tabsContainer: {
     flexDirection: 'row',
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.pill,
     borderWidth: 1,
     borderColor: Colors.divider,
-    padding: 4,
+    padding: 3,
+    ...Shadows.hairline,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
     alignItems: 'center',
     borderRadius: BorderRadius.pill,
   },
@@ -664,7 +748,7 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontFamily: Typography.bodyMed,
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.slate,
   },
   tabTextActive: {
@@ -685,7 +769,12 @@ const styles = StyleSheet.create({
   },
   searchStandalone: {
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  peopleSearchContainer: {
+    backgroundColor: Colors.white,
+    borderColor: Colors.divider,
+    borderRadius: BorderRadius.card,
   },
   searchIcon: {
     marginRight: Spacing.sm,
@@ -693,9 +782,15 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontFamily: Typography.body,
-    fontSize: 16,
+    fontSize: 14,
     color: Colors.text,
-    paddingVertical: Spacing.md,
+    paddingVertical: 12,
+  },
+  peopleSearchInput: {
+    color: Colors.primary,
+  },
+  peopleDiscoveryHeader: {
+    paddingTop: 0,
   },
   eventSearchWrap: {
     position: 'relative',
@@ -817,28 +912,37 @@ const styles = StyleSheet.create({
   },
   sectionTitleNoMargin: {
     fontFamily: Typography.display,
-    fontSize: 22,
+    fontSize: 19,
     color: Colors.text,
   },
   peopleHeader: {
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    ...Shadows.soft,
   },
   peopleSubtitle: {
     fontFamily: Typography.body,
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
   },
   peopleHeaderIcon: {
-    width: 44,
-    height: 44,
+    width: 34,
+    height: 34,
     borderRadius: BorderRadius.full,
-    backgroundColor: Colors.accent + '14',
+    backgroundColor: Colors.accentSoft,
+    borderWidth: 1,
+    borderColor: Colors.accent + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -848,7 +952,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   trendingLabel: {
     fontFamily: Typography.bodyMed,
@@ -858,16 +962,16 @@ const styles = StyleSheet.create({
   },
   trendingChip: {
     borderRadius: BorderRadius.pill,
-    backgroundColor: Colors.primary + '10',
+    backgroundColor: Colors.white,
     borderWidth: 1,
-    borderColor: Colors.primary + '16',
+    borderColor: Colors.divider,
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
   trendingChipText: {
     fontFamily: Typography.bodyMed,
     fontSize: 11,
-    color: Colors.primary,
+    color: Colors.accent,
   },
   loader: {
     marginTop: Spacing.xl * 2,
@@ -1052,55 +1156,50 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.card,
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
-    padding: Spacing.md,
     flexDirection: 'row',
-    gap: Spacing.md,
     borderWidth: 1,
     borderColor: Colors.divider,
     overflow: 'hidden',
+    height: 132,
+    padding: 8,
   },
-  userAccentBar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-    backgroundColor: Colors.accent,
-  },
-  userPhotoContainer: {
+  userImagePanel: {
+    width: 86,
+    height: 116,
     position: 'relative',
+    backgroundColor: Colors.primarySoft,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
   },
-  userPhoto: {
-    width: 74,
-    height: 74,
-    borderRadius: BorderRadius.full,
-    borderWidth: 3,
-    borderColor: Colors.cream,
+  userPhotoFull: {
+    width: '100%',
+    height: 116,
   },
-  userPhotoPlaceholder: {
-    width: 74,
-    height: 74,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary,
+  userImagePlaceholder: {
+    width: '100%',
+    height: 116,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: Colors.cream,
+  },
+  userImageGradient: {
+    ...StyleSheet.absoluteFillObject,
   },
   userInitial: {
     fontFamily: Typography.display,
-    fontSize: 28,
+    fontSize: 34,
     color: Colors.white,
   },
-  userInfo: {
+  userDetailsPanel: {
     flex: 1,
     minWidth: 0,
+    height: 116,
+    paddingLeft: Spacing.md,
+    paddingVertical: 1,
   },
-  userHeader: {
+  userTopLine: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: Spacing.xs,
     gap: Spacing.sm,
   },
   userTitleBlock: {
@@ -1111,12 +1210,19 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyBold,
     fontSize: 17,
     color: Colors.text,
-    marginBottom: 4,
+    marginBottom: 2,
+  },
+  userPrimaryInterest: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 12,
+    color: Colors.accent,
   },
   userMetaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 5,
+    marginTop: 5,
+    marginBottom: 5,
   },
   userMetaPill: {
     flexDirection: 'row',
@@ -1132,10 +1238,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: Colors.success + '12',
+    backgroundColor: Colors.success + '20',
     borderRadius: BorderRadius.pill,
     borderWidth: 1,
-    borderColor: Colors.success + '24',
+    borderColor: Colors.success + '55',
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
@@ -1154,7 +1260,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: Colors.accent + '12',
+    backgroundColor: Colors.accentSoft,
+    borderWidth: 1,
+    borderColor: Colors.accent + '18',
     borderRadius: BorderRadius.pill,
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1166,10 +1274,10 @@ const styles = StyleSheet.create({
   },
   userBio: {
     fontFamily: Typography.body,
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.textSecondary,
-    marginBottom: Spacing.sm,
-    lineHeight: 18,
+    marginBottom: 0,
+    lineHeight: 15,
   },
   interestsContainer: {
     flexDirection: 'row',
@@ -1202,6 +1310,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: Spacing.sm,
+    marginTop: 'auto',
   },
   joinedMiniStat: {
     flexDirection: 'row',
@@ -1217,11 +1326,19 @@ const styles = StyleSheet.create({
   viewProfilePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 2,
+    minHeight: 28,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.cream,
+    borderWidth: 1,
+    borderColor: Colors.divider,
   },
   viewProfileText: {
     fontFamily: Typography.bodyBold,
-    fontSize: 12,
-    color: Colors.accent,
+    fontSize: 11,
+    color: Colors.primary,
   },
 });
