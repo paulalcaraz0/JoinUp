@@ -7,9 +7,9 @@ import {
   Image,
   TextInput,
   FlatList,
-  ActivityIndicator,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import { ActivityCard } from '../../components/ui/ActivityCard';
 import { CategoryChip } from '../../components/ui/CategoryChip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { NotificationBadge } from '../../components/ui/NotificationBadge';
+import { ActivityCardSkeleton } from '../../components/ui/LoadingSkeleton';
 import { useActivities } from '../../hooks/useActivities';
 import { useAuthStore } from '../../store/authStore';
 import { notificationService } from '../../lib/api/notificationService';
@@ -104,6 +105,8 @@ const FeedActivityRow = React.memo(function FeedActivityRow({
     await onJoin(activity.id, userId);
   }, [activity.id, isLeaving, onJoin, userId]);
 
+  const isHost = Boolean(userId && activity.hostId === userId);
+
   return (
     <Animated.View exiting={SlideOutLeft.duration(220)}>
       <ActivityCard
@@ -112,6 +115,8 @@ const FeedActivityRow = React.memo(function FeedActivityRow({
         isLeaving={isLeaving}
         onPress={handlePress}
         onJoin={handleJoin}
+        joinLabel={isHost ? 'Hosting' : undefined}
+        joinDisabled={isHost}
       />
     </Animated.View>
   );
@@ -120,7 +125,7 @@ const FeedActivityRow = React.memo(function FeedActivityRow({
 export default function HomeFeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { activities, isLoading, error, joinActivity, joinedActivityIds, refetch } = useActivities();
+  const { activities, isLoading, error, joinActivity, joinStatuses, refetch } = useActivities();
   const user = useAuthStore((s) => s.user);
 
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -148,6 +153,10 @@ export default function HomeFeedScreen() {
   }, [user?.photoURL]);
 
   const avatarInitial = (user?.displayName || 'U').trim().charAt(0).toUpperCase();
+  const hasActiveFilters =
+    selectedCategory !== 'All' ||
+    selectedDiscoveryFilter !== 'All' ||
+    searchQuery.trim().length > 0;
 
   const filteredActivities = useMemo(() => {
     let filtered = activities;
@@ -164,15 +173,19 @@ export default function HomeFeedScreen() {
       );
     }
 
-    if (joinedActivityIds.length) {
-      const joinedIds = new Set(joinedActivityIds);
+    const approvedActivityIds = Object.entries(joinStatuses)
+      .filter(([, status]) => status === 'approved')
+      .map(([activityId]) => activityId);
+
+    if (approvedActivityIds.length) {
+      const joinedIds = new Set(approvedActivityIds);
       filtered = filtered.filter(
         (activity) => !joinedIds.has(activity.id) || fadingActivityIds.includes(activity.id)
       );
     }
 
     return applyDiscoveryFilter(filtered, selectedDiscoveryFilter, new Date());
-  }, [activities, fadingActivityIds, joinedActivityIds, searchQuery, selectedCategory, selectedDiscoveryFilter]);
+  }, [activities, fadingActivityIds, joinStatuses, searchQuery, selectedCategory, selectedDiscoveryFilter]);
 
   const fetchUnreadNotificationCount = useCallback(async () => {
     if (!user?.uid) {
@@ -261,6 +274,12 @@ export default function HomeFeedScreen() {
     router.push('/buddy');
   }, [router]);
 
+  const clearFilters = useCallback(() => {
+    setSelectedCategory('All');
+    setSelectedDiscoveryFilter('All');
+    setSearchQuery('');
+  }, []);
+
   const handleJoinActivity = useCallback(async (activityId: string, userId: string) => {
     if (fadingActivityIdsRef.current.includes(activityId)) return false;
 
@@ -269,6 +288,17 @@ export default function HomeFeedScreen() {
 
     if (!joined) {
       setFadingActivityIds((prev) => prev.filter((id) => id !== activityId));
+      const activity = activities.find((item) => item.id === activityId);
+      const currentStatus = joinStatuses[activityId];
+      const message =
+        currentStatus === 'pending'
+          ? 'Your join request is already waiting for approval.'
+          : currentStatus
+            ? 'You already have an active join status for this activity.'
+            : activity?.currentSlots === 0
+              ? 'This activity is already full.'
+              : error ?? 'Could not join this activity. Please try again.';
+      Alert.alert('Could not join', message);
       return false;
     }
 
@@ -277,7 +307,7 @@ export default function HomeFeedScreen() {
     }, 220);
 
     return true;
-  }, [joinActivity]);
+  }, [activities, error, joinActivity, joinStatuses]);
 
   const renderActivity = useCallback(
     ({ item, index }: { item: Activity; index: number }) => (
@@ -413,9 +443,11 @@ export default function HomeFeedScreen() {
 
       {/* Activity Feed */}
       <View style={styles.feedContainer}>
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={Colors.accent} />
+        {isLoading && activities.length === 0 ? (
+          <View style={styles.skeletonList}>
+            {[0, 1, 2].map((item) => (
+              <ActivityCardSkeleton key={item} />
+            ))}
           </View>
         ) : error && activities.length === 0 ? (
           <EmptyState
@@ -430,10 +462,14 @@ export default function HomeFeedScreen() {
         ) : filteredActivities.length === 0 ? (
           <EmptyState
             icon="calendar-outline"
-            title="No activities found"
-            message="Try changing your filters or check back later for new activities."
-            actionLabel="Refresh"
-            onAction={() => {
+            title={hasActiveFilters ? 'No matches found' : 'No activities yet'}
+            message={
+              hasActiveFilters
+                ? 'Try clearing your filters or searching a different activity, category, or place.'
+                : 'There are no active activities right now. Create one or check back soon.'
+            }
+            actionLabel={hasActiveFilters ? 'Clear filters' : 'Refresh'}
+            onAction={hasActiveFilters ? clearFilters : () => {
               void refetch();
             }}
           />
@@ -641,10 +677,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     alignItems: 'center',
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  skeletonList: {
+    paddingTop: Spacing.xs,
   },
   feedContainer: {
     flex: 1,

@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import Constants from 'expo-constants';
@@ -12,6 +13,93 @@ import type { User } from '../types';
 WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_AUTH_TIMEOUT_MS = 45000;
+const EMAIL_AUTH_TIMEOUT_MS = 30000;
+const PROFILE_QUERY_TIMEOUT_MS = 20000;
+const SUPABASE_STORAGE_KEY_PREFIX = 'sb-';
+const PROFILE_SELECT =
+  'id, display_name, photo_url, bio, location, age_range, interests, activities_joined, rating, rating_count, verification_status, created_at';
+const CORE_PROFILE_SELECT =
+  'id, display_name, photo_url, bio, age_range, interests, activities_joined, rating, rating_count, created_at';
+const APP_AUTH_CACHE_KEY_PREFIXES = [
+  'supabase.auth.token',
+  'joinedActivities:',
+  'joinStatusHistory:',
+  'chatUnreadActivityIds:v1:',
+  'chatReadMarker:v1:',
+];
+
+function authDebug(label: string, payload?: unknown) {
+  if (!__DEV__) return;
+
+  if (payload === undefined) {
+    console.log(`[auth] ${label}`);
+    return;
+  }
+
+  console.log(`[auth] ${label}`, payload);
+}
+
+function serializeAuthError(error: any) {
+  if (!error) return null;
+
+  return {
+    name: error.name,
+    message: error.message,
+    code: error.code,
+    status: error.status,
+    details: error.details,
+    hint: error.hint,
+    stack: error.stack,
+  };
+}
+
+function isSchemaCacheError(error: any) {
+  const text = [error?.code, error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return text.includes('schema cache') || text.includes('pgrst20');
+}
+
+function getFriendlyAuthErrorMessage(error: any) {
+  const rawMessage = String(error?.message ?? '').trim();
+  const message = rawMessage.toLowerCase();
+
+  if (message.includes('invalid login credentials')) {
+    return 'Incorrect email or password. Please check your details and try again.';
+  }
+
+  if (message.includes('email not confirmed')) {
+    return 'Please verify your email first, then sign in.';
+  }
+
+  if (message.includes('network') || message.includes('fetch') || message.includes('timed out')) {
+    return rawMessage || 'Network error. Check your connection and try again.';
+  }
+
+  if (message.includes('profile query failed')) {
+    return 'Signed in, but JoinUp could not load your profile. Please try again.';
+  }
+
+  return rawMessage || 'Failed to sign in. Please check your credentials.';
+}
+
+async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${label} timed out. Check your network connection and try again.`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function isLikelyExistingEmailSignUpResponse(authData: any, normalizedEmail: string) {
   const user = authData?.user;
@@ -169,15 +257,67 @@ function mapProfile(id: string, profile: any): User {
 
 async function resolveSessionUser(session: any, setUser: (user: User | null) => void) {
   if (!session?.user) {
+    authDebug('resolveSessionUser: no session user');
     setUser(null);
     return;
   }
 
-  const { data: profile } = await supabase
+  authDebug('first database query after login:start', {
+    object: 'public.profiles',
+    query: `profiles.select(${PROFILE_SELECT}).eq(id, ${session.user.id}).maybeSingle()`,
+  });
+
+  let profileSelect = PROFILE_SELECT;
+  const profileResult = await withTimeout(
+    supabase
     .from('profiles')
-    .select('*')
+    .select(PROFILE_SELECT)
     .eq('id', session.user.id)
-    .maybeSingle();
+      .maybeSingle(),
+    PROFILE_QUERY_TIMEOUT_MS,
+    'Profile query'
+  );
+  let profile: any = profileResult.data;
+  let profileError: any = profileResult.error;
+
+  if (profileError && isSchemaCacheError(profileError)) {
+    authDebug('first database query after login:schema fallback', {
+      query: `profiles.select(${CORE_PROFILE_SELECT}).eq(id, ${session.user.id}).maybeSingle()`,
+      error: serializeAuthError(profileError),
+    });
+
+    profileSelect = CORE_PROFILE_SELECT;
+    const fallbackResult = await withTimeout(
+      supabase
+        .from('profiles')
+        .select(CORE_PROFILE_SELECT)
+        .eq('id', session.user.id)
+        .maybeSingle(),
+      PROFILE_QUERY_TIMEOUT_MS,
+      'Profile query'
+    );
+
+    profile = fallbackResult.data;
+    profileError = fallbackResult.error;
+  }
+
+  authDebug('first database query after login:result', {
+    hasProfile: Boolean(profile),
+    error: serializeAuthError(profileError),
+  });
+
+  if (profileError) {
+    const message = profileError.message ?? 'Failed to load profile after login.';
+    const wrapped = new Error(`Profile query failed: ${message}`);
+    (wrapped as any).cause = profileError;
+    (wrapped as any).query = `profiles.select(${profileSelect}).eq(id, ${session.user.id}).maybeSingle()`;
+    authDebug('first database query after login:error', {
+      query: (wrapped as any).query,
+      error: serializeAuthError(profileError),
+      stack: wrapped.stack,
+    });
+    throw wrapped;
+  }
 
   if (profile) {
     setUser(mapProfile(session.user.id, profile));
@@ -202,10 +342,34 @@ async function resolveSessionUser(session: any, setUser: (user: User | null) => 
 }
 
 export async function signOutAndResetSession() {
-  await supabase.auth.signOut({ scope: 'local' });
+  try {
+    await withTimeout(
+      supabase.auth.signOut({ scope: 'global' }),
+      10000,
+      'Sign out timed out. Local session was cleared on this device.'
+    );
+  } finally {
+    queryClient.clear();
+    useAuthStore.getState().signOut();
+    await clearLocalAuthSessionCache();
+  }
+}
 
-  queryClient.clear();
-  useAuthStore.getState().signOut();
+export async function clearLocalAuthSessionCache() {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const authKeys = keys.filter(
+      (key) =>
+        key.startsWith(SUPABASE_STORAGE_KEY_PREFIX) ||
+        APP_AUTH_CACHE_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+    );
+
+    if (authKeys.length > 0) {
+      await AsyncStorage.multiRemove(authKeys);
+    }
+  } catch {
+    // Best-effort cleanup for development/testing and logout.
+  }
 }
 
 type UseAuthOptions = {
@@ -216,6 +380,8 @@ export function useAuth(options: UseAuthOptions = {}) {
   const { initialize = true } = options;
   const { user, isAuthenticated, isLoading, setUser, setLoading } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
+  const sessionSyncKeyRef = useRef<string | null>(null);
+  const sessionSyncPromiseRef = useRef<Promise<void> | null>(null);
 
   // Listen for auth state changes
   useEffect(() => {
@@ -226,21 +392,53 @@ export function useAuth(options: UseAuthOptions = {}) {
     let isActive = true;
 
     const syncSession = async (session: any) => {
+      const sessionKey = session?.access_token
+        ? `${session.user?.id ?? 'unknown'}:${session.access_token}`
+        : 'no-session';
+
+      if (sessionSyncKeyRef.current === sessionKey && sessionSyncPromiseRef.current) {
+        authDebug('auth state session sync skipped', {
+          reason: 'same session already syncing',
+          userId: session?.user?.id,
+        });
+        return sessionSyncPromiseRef.current;
+      }
+
+      sessionSyncKeyRef.current = sessionKey;
+      const syncPromise = (async () => {
       try {
         await resolveSessionUser(session, (nextUser) => {
           if (isActive) {
             setUser(nextUser);
           }
         });
-      } catch {
-        if (isActive) {
+      } catch (err) {
+        authDebug('auth state session sync failed', {
+          error: serializeAuthError(err),
+          cause: serializeAuthError((err as any)?.cause),
+        });
+
+        if (isActive && !session?.user) {
           setUser(null);
         }
+      } finally {
+        if (sessionSyncKeyRef.current === sessionKey) {
+          sessionSyncPromiseRef.current = null;
+        }
       }
+      })();
+
+      sessionSyncPromiseRef.current = syncPromise;
+      return syncPromise;
     };
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        authDebug('auth state change', {
+          event,
+          hasSession: Boolean(session),
+          userId: session?.user?.id,
+        });
         setTimeout(() => {
           void syncSession(session);
         }, 0);
@@ -248,6 +446,10 @@ export function useAuth(options: UseAuthOptions = {}) {
     );
 
     const bootstrapAuth = async () => {
+      if (__DEV__) {
+        console.time('[auth] bootstrap session');
+      }
+
       try {
         if (Platform.OS === 'web' && typeof window !== 'undefined') {
           const callbackUrl = new URL(window.location.href);
@@ -282,12 +484,18 @@ export function useAuth(options: UseAuthOptions = {}) {
         }
 
         const { data: { session } } = await supabase.auth.getSession();
-        await syncSession(session);
+        if (!sessionSyncPromiseRef.current) {
+          await syncSession(session);
+        }
       } catch {
         if (isActive) {
           setUser(null);
         }
       } finally {
+        if (__DEV__) {
+          console.timeEnd('[auth] bootstrap session');
+        }
+
         if (isActive) {
           setLoading(false);
         }
@@ -317,24 +525,41 @@ export function useAuth(options: UseAuthOptions = {}) {
   const signIn = useCallback(
     async (email: string, password: string) => {
       try {
+        authDebug('login start', { email: email.trim().toLowerCase() });
         setLoading(true);
         setError(null);
 
         const normalizedEmail = email.trim().toLowerCase();
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password,
+        const { data: authData, error: authError } = await withTimeout(
+          supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password,
+          }),
+          EMAIL_AUTH_TIMEOUT_MS,
+          'Supabase sign in'
+        );
+        authDebug('supabase auth response', {
+          hasSession: Boolean(authData?.session),
+          userId: authData?.user?.id,
+          error: serializeAuthError(authError),
         });
         if (authError) throw authError;
+        if (!authData?.session) {
+          throw new Error('Supabase sign in did not return a session. Please try again.');
+        }
 
         await resolveSessionUser(authData.session, setUser);
       } catch (err: any) {
-        if (err?.message?.toLowerCase?.().includes('email not confirmed')) {
-          setError('Please verify your email first, then sign in.');
-        } else {
-          setError(err.message ?? 'Failed to sign in. Please check your credentials.');
-        }
-        throw err;
+        authDebug('login failed', {
+          error: serializeAuthError(err),
+          cause: serializeAuthError(err?.cause),
+          query: err?.query,
+        });
+        const friendlyMessage = getFriendlyAuthErrorMessage(err);
+        setError(friendlyMessage);
+        const friendlyError = new Error(friendlyMessage);
+        (friendlyError as any).cause = err;
+        throw friendlyError;
       } finally {
         setLoading(false);
       }

@@ -497,7 +497,7 @@ export default function ExploreScreen() {
         <View style={styles.listShell}>
           <Text style={styles.sectionTitle}>Happening Near You</Text>
 
-          {activitiesLoading ? (
+          {activitiesLoading && activities.length === 0 ? (
             <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
           ) : activitiesError && activities.length === 0 ? (
             <EmptyState
@@ -565,7 +565,7 @@ export default function ExploreScreen() {
             </View>
           ) : null}
 
-          {usersLoading ? (
+          {usersLoading && users.length === 0 ? (
             <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
           ) : usersError && users.length === 0 ? (
             <EmptyState

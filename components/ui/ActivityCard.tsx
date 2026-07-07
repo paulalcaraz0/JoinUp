@@ -14,11 +14,23 @@ interface ActivityCardProps {
   style?: ViewStyle;
   index?: number;
   isLeaving?: boolean;
+  joinLabel?: string;
+  joinDisabled?: boolean;
 }
 
-function ActivityCardComponent({ activity, onPress, onJoin, style, index = 0, isLeaving = false }: ActivityCardProps) {
+function ActivityCardComponent({
+  activity,
+  onPress,
+  onJoin,
+  style,
+  index = 0,
+  isLeaving = false,
+  joinLabel,
+  joinDisabled = false,
+}: ActivityCardProps) {
   const slotsLeft = activity.currentSlots;
   const isFull = slotsLeft <= 0;
+  const isActionDisabled = isFull || isLeaving || joinDisabled;
   const chipColor = CategoryColors[activity.category] ?? Colors.accent;
   const dateStr = activity.dateTime ? format(new Date(activity.dateTime), 'EEE, h:mm a') : '';
   const joined = activity.maxSlots - activity.currentSlots;
@@ -102,18 +114,18 @@ function ActivityCardComponent({ activity, onPress, onJoin, style, index = 0, is
         </View>
 
         <TouchableOpacity
-          style={[styles.joinBtn, isFull && styles.joinBtnDisabled]}
+          style={[styles.joinBtn, isActionDisabled && styles.joinBtnDisabled]}
           onPress={(event) => {
             event.stopPropagation?.();
             onJoin();
           }}
-          disabled={isFull || isLeaving}
+          disabled={isActionDisabled}
           activeOpacity={0.82}
         >
           <Text style={styles.joinBtnText}>
-            {isLeaving ? 'Joining...' : isFull ? 'Full' : 'Join'}
+            {joinLabel ?? (isLeaving ? 'Joining...' : isFull ? 'Full' : 'Join')}
           </Text>
-          {!isFull && !isLeaving ? <Ionicons name="arrow-forward" size={15} color={Colors.white} /> : null}
+          {!isActionDisabled ? <Ionicons name="arrow-forward" size={15} color={Colors.white} /> : null}
         </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>

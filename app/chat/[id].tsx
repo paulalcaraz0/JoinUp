@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
   Image,
   Linking,
@@ -27,6 +26,8 @@ import * as Location from 'expo-location';
 import { decode } from 'base64-arraybuffer';
 import { format } from 'date-fns';
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { MessageSkeleton } from '../../components/ui/LoadingSkeleton';
 import { clearChatActivityUnread, useChat } from '../../hooks/useChat';
 import { useActivities } from '../../hooks/useActivities';
 import { useAuthStore } from '../../store/authStore';
@@ -145,6 +146,13 @@ const MessageRow = React.memo(function MessageRow({
     : '';
   const canDelete = !isSystem && (message.senderId === currentUserId || hostId === currentUserId);
   const senderInitial = (message.senderName || 'U').trim().charAt(0).toUpperCase();
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
+  const [imageRetryKey, setImageRetryKey] = useState(0);
+
+  useEffect(() => {
+    setImageLoadFailed(false);
+    setImageRetryKey(0);
+  }, [message.imageUrl]);
 
   const senderAvatar = !isMe ? (
     message.senderPhoto ? (
@@ -216,6 +224,11 @@ const MessageRow = React.memo(function MessageRow({
   }
 
   if (message.type === 'image' && message.imageUrl) {
+    const handleRetryImage = () => {
+      setImageLoadFailed(false);
+      setImageRetryKey((value) => value + 1);
+    };
+
     const imageBubble = (
       <>
         {!isMe ? (
@@ -228,7 +241,28 @@ const MessageRow = React.memo(function MessageRow({
           onLongPress={handleDelete}
           style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
         >
-          <Image source={{ uri: message.imageUrl }} style={styles.imageMessage} resizeMode="cover" />
+          <View style={styles.imageMessageFrame}>
+            {imageLoadFailed ? (
+              <TouchableOpacity
+                style={styles.imageRetryWrap}
+                onPress={handleRetryImage}
+                activeOpacity={0.82}
+              >
+                <Ionicons name="refresh-outline" size={22} color={isMe ? Colors.white : Colors.slate} />
+                <Text style={[styles.imageRetryText, isMe && styles.imageRetryTextSent]}>
+                  Tap to retry image
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <Image
+                key={`${message.id}-${imageRetryKey}`}
+                source={{ uri: message.imageUrl }}
+                style={styles.imageMessage}
+                resizeMode="cover"
+                onError={() => setImageLoadFailed(true)}
+              />
+            )}
+          </View>
           <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
         </TouchableOpacity>
       </>
@@ -314,7 +348,7 @@ export default function GroupChatScreen() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const { activities, getJoinStatus, canAccessChat } = useActivities();
-  const { messages, isLoading, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch } = useChat(id);
+  const { messages, isLoading, error: chatError, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch } = useChat(id);
 
   const [inputText, setInputText] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -657,9 +691,9 @@ export default function GroupChatScreen() {
       const imageObjectPath = await uploadChatImage(result.assets[0]);
       shouldAutoScrollRef.current = true;
       await sendImage(imageObjectPath, user.uid, user.displayName);
-    } catch (error) {
+    } catch (error: any) {
       shouldAutoScrollRef.current = false;
-      Alert.alert('Upload failed', 'Could not attach this photo. Please try again.');
+      Alert.alert('Upload failed', error?.message ?? 'Could not attach this photo. Please try again.');
     } finally {
       setIsUploadingImage(false);
     }
@@ -688,9 +722,9 @@ export default function GroupChatScreen() {
         user.displayName
       );
       shouldAutoScrollRef.current = true;
-    } catch (error) {
+    } catch (error: any) {
       shouldAutoScrollRef.current = false;
-      Alert.alert('Location unavailable', 'Could not get your current location.');
+      Alert.alert('Location unavailable', error?.message ?? 'Could not share your location right now.');
     } finally {
       setIsSharingLocation(false);
     }
@@ -905,7 +939,7 @@ export default function GroupChatScreen() {
                 <View style={styles.infoMetaRow}>
                   <Ionicons name="time-outline" size={14} color={Colors.slate} />
                   <Text style={styles.infoMetaText}>
-                    {activity.dateTime ? format(new Date(activity.dateTime), 'EEE, MMM d • h:mm a') : 'Date TBD'}
+                    {activity.dateTime ? format(new Date(activity.dateTime), 'EEE, MMM d, h:mm a') : 'Date TBD'}
                   </Text>
                 </View>
                 <View style={styles.infoMetaRow}>
@@ -966,7 +1000,7 @@ export default function GroupChatScreen() {
         <View style={styles.eventBanner}>
           <Text style={styles.eventBannerText}>
             {activity.dateTime
-              ? format(new Date(activity.dateTime), 'EEE, MMM d • h:mm a')
+              ? format(new Date(activity.dateTime), 'EEE, MMM d, h:mm a')
               : ''
             }
           </Text>
@@ -976,15 +1010,38 @@ export default function GroupChatScreen() {
 
       {/* Messages */}
       {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+        <View style={styles.messageSkeletonList}>
+          {[0, 1, 2, 3, 4].map((item) => (
+            <MessageSkeleton key={item} />
+          ))}
         </View>
+      ) : chatError && visibleMessages.length === 0 ? (
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Could not load chat"
+          message={chatError}
+          actionLabel="Try again"
+          onAction={() => {
+            void refetch();
+          }}
+        />
       ) : (
         <FlatList
           ref={flatListRef}
           data={visibleMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
+          ListEmptyComponent={
+            <View style={styles.emptyMessagesWrap}>
+              <Ionicons name="chatbubble-ellipses-outline" size={34} color={Colors.slate} />
+              <Text style={styles.emptyMessagesTitle}>No messages yet</Text>
+              <Text style={styles.emptyMessagesBody}>Say hello and help the group get started.</Text>
+            </View>
+          }
+          initialNumToRender={14}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
           onScroll={handleScroll}
@@ -1272,6 +1329,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  messageSkeletonList: {
+    flex: 1,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+  },
   lockedWrap: {
     flex: 1,
     alignItems: 'center',
@@ -1347,6 +1409,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.lg,
     flexGrow: 1,
+  },
+  emptyMessagesWrap: {
+    flex: 1,
+    minHeight: 260,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  emptyMessagesTitle: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 17,
+    color: Colors.text,
+    marginTop: Spacing.sm,
+  },
+  emptyMessagesBody: {
+    fontFamily: Typography.body,
+    fontSize: 14,
+    color: Colors.slate,
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 20,
   },
   systemMessage: {
     alignSelf: 'center',
@@ -1444,11 +1527,33 @@ const styles = StyleSheet.create({
   locationMetaTextSent: {
     color: Colors.white + 'D9',
   },
-  imageMessage: {
+  imageMessageFrame: {
     width: 220,
     height: 220,
     borderRadius: BorderRadius.md,
     marginBottom: 4,
+    overflow: 'hidden',
+    backgroundColor: Colors.divider + '66',
+  },
+  imageMessage: {
+    width: '100%',
+    height: '100%',
+  },
+  imageRetryWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.md,
+  },
+  imageRetryText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 13,
+    color: Colors.slate,
+    textAlign: 'center',
+  },
+  imageRetryTextSent: {
+    color: Colors.white + 'D9',
   },
   imageUnavailableWrap: {
     width: 220,

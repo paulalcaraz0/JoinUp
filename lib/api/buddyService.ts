@@ -49,7 +49,7 @@ const CATEGORY_KEYWORDS: Record<Activity['category'], string[]> = {
     'volleyball',
     'workout',
   ],
-  Study: ['coding', 'code', 'exam', 'homework', 'learn', 'programming', 'project', 'review', 'school', 'study'],
+  Study: ['coding', 'code', 'exam', 'homework', 'learn', 'programming', 'project', 'review', 'school', 'study', 'studying'],
   [CAFE_CATEGORY]: ['cafe', 'caf\u00E9', 'coffee'],
   Outdoors: ['hike', 'hiking', 'outdoor', 'outside', 'park', 'picnic', 'walk'],
   Gaming: ['console', 'esports', 'game', 'games', 'gaming'],
@@ -102,6 +102,7 @@ const TIME_PATTERN = /\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)\b|\b(?:[01]?
 const RELATIVE_DATE_PATTERN =
   /\b(?:later|today|tomorrow|weekend)\b|\b(?:this\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const DRAFT_FOLLOW_UP_PREFIX = 'I can draft that, but I need';
 
 const toId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const normalize = (value: string) => value.trim().toLowerCase();
@@ -116,7 +117,7 @@ function inferCategory(text: string): Activity['category'] {
 
   if (includesAny(normalized, ['worship', 'prayer', 'church', 'bible'])) return 'Social';
   if (includesAny(normalized, ['basketball', 'volleyball', 'badminton', 'running', 'cycling', 'gym'])) return 'Fitness';
-  if (includesAny(normalized, ['study', 'review', 'coding', 'programming', 'project'])) return 'Study';
+  if (includesAny(normalized, ['study', 'studying', 'study session', 'review', 'coding', 'programming', 'project'])) return 'Study';
   if (includesAny(normalized, ['coffee', 'cafe', 'caf\u00E9'])) return CAFE_CATEGORY;
   if (includesAny(normalized, ['food', 'dinner', 'lunch', 'eat', 'restaurant'])) return 'Food';
   if (includesAny(normalized, ['hiking', 'hike', 'walk', 'outdoor', 'picnic'])) return 'Outdoors';
@@ -128,6 +129,7 @@ function inferCategory(text: string): Activity['category'] {
 
 function hasActivityType(text: string) {
   const normalized = normalize(text);
+  if (includesAny(normalized, ['studying', 'study session'])) return true;
   return ACTIVITY_TYPE_KEYWORDS.some((keyword) => keyword && hasWholeWord(normalized, keyword));
 }
 
@@ -222,6 +224,8 @@ function extractTitle(text: string, category: Activity['category']) {
     [/\bvolleyball\s+(?:game|activity|meetup)\b/i, 'Volleyball Game'],
     [/\bbadminton\s+(?:game|activity|meetup)\b/i, 'Badminton Game'],
     [/\bstudy\s+group\b/i, 'Study Group'],
+    [/\bstudy\s+session\b/i, 'Study Session'],
+    [/\bstudying\b/i, 'Study Session'],
     [/\bcoding\s+(?:session|group|activity)\b/i, 'Coding Session'],
     [/\bcoffee\s+(?:hangout|meetup|activity)\b/i, 'Coffee Hangout'],
   ];
@@ -234,7 +238,10 @@ function extractTitle(text: string, category: Activity['category']) {
   )?.[1];
 
   if (afterCreate) {
-    const cleaned = afterCreate.trim();
+    const cleaned = afterCreate
+      .replace(/\bactivity\s+(?:about|for)\b/gi, '')
+      .replace(/\b(?:about|for)\b/gi, '')
+      .trim();
     if (cleaned && !/^(activity|event|something|anything)$/i.test(cleaned)) {
       return toTitleCase(cleaned);
     }
@@ -244,6 +251,7 @@ function extractTitle(text: string, category: Activity['category']) {
   if (normalized.includes('basketball')) return 'Basketball Game';
   if (normalized.includes('volleyball')) return 'Volleyball Game';
   if (normalized.includes('badminton')) return 'Badminton Game';
+  if (normalized.includes('study session') || normalized.includes('studying')) return 'Study Session';
   if (normalized.includes('study')) return 'Study Group';
   if (normalized.includes('coffee') || normalized.includes('cafe')) return 'Coffee Hangout';
 
@@ -265,6 +273,7 @@ function startsLikeTimeOrDate(value: string) {
   return (
     /^(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)\b/i.test(value) ||
     /^(?:[01]?\d|2[0-3]):[0-5]\d\b/i.test(value) ||
+    /^(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i.test(value) ||
     /^(?:later|today|tomorrow|this|weekend|morning|afternoon|evening|night)\b/i.test(value)
   );
 }
@@ -285,7 +294,7 @@ function extractLocation(text: string) {
     if (startsLikeTimeOrDate(remaining)) continue;
 
     const boundary = remaining.search(
-      /\s+(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)\b|\s+(?:[01]?\d|2[0-3]):[0-5]\d\b|\s+\b(?:later|today|tomorrow|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|morning|afternoon|evening|night|for|with|limit|maximum|max)\b/i
+      /\s+(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm)\b|\s+(?:[01]?\d|2[0-3]):[0-5]\d\b|\s+\b(?:later|today|tomorrow|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|morning|afternoon|evening|night|for|with|limit|maximum|max)\b/i
     );
     const candidate = cleanLocationCandidate(boundary >= 0 ? remaining.slice(0, boundary) : remaining);
 
@@ -336,7 +345,43 @@ function followUpForMissingDetails(missing: string[]) {
       ? missing[0]
       : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
 
+  if (readable === 'location') {
+    return 'I can draft that. Where should this activity happen?';
+  }
+
   return `I can draft that, but I need the ${readable} first.`;
+}
+
+function isCreateIntent(text: string) {
+  return includesAny(normalize(text), CREATE_KEYWORDS);
+}
+
+function isDraftFollowUp(message?: BuddyMessage) {
+  return message?.role === 'assistant' && message.text.startsWith(DRAFT_FOLLOW_UP_PREFIX) ||
+    message?.role === 'assistant' && message.text === 'I can draft that. Where should this activity happen?';
+}
+
+function buildDraftPromptFromConversation(messages: BuddyMessage[]) {
+  const latestUserIndex = messages.map((message) => message.role).lastIndexOf('user');
+  if (latestUserIndex < 0) return '';
+
+  const latestUser = messages[latestUserIndex]?.text ?? '';
+  const previousAssistant = messages
+    .slice(0, latestUserIndex)
+    .reverse()
+    .find((message) => message.role === 'assistant');
+
+  const recentUsers = messages
+    .slice(Math.max(0, latestUserIndex - 6), latestUserIndex + 1)
+    .filter((message) => message.role === 'user')
+    .map((message) => message.text);
+
+  const hasRecentCreateIntent = recentUsers.some(isCreateIntent);
+  if (!hasRecentCreateIntent && !isDraftFollowUp(previousAssistant)) {
+    return latestUser;
+  }
+
+  return recentUsers.join(' ');
 }
 
 /*
@@ -422,27 +467,37 @@ export async function sendBuddyMessage(
   const latest = [...messages].reverse().find((message) => message.role === 'user');
   const prompt = latest?.text ?? '';
   const normalized = normalize(prompt);
+  const conversationDraftPrompt = buildDraftPromptFromConversation(messages);
+  const normalizedDraftPrompt = normalize(conversationDraftPrompt);
+  const latestUserIndex = messages.map((message) => message.role).lastIndexOf('user');
+  const previousAssistant = latestUserIndex > 0
+    ? messages
+        .slice(0, latestUserIndex)
+        .reverse()
+        .find((message) => message.role === 'assistant')
+    : undefined;
+  const continuingDraft = isDraftFollowUp(previousAssistant);
 
-  if (!includesAny(normalized, JOINUP_KEYWORDS)) {
+  if (!includesAny(normalized, JOINUP_KEYWORDS) && !continuingDraft) {
     const message = assistantMessage(BUDDY_SCOPE_MESSAGE);
     return { message };
   }
 
-  if (normalized.length < 10 || normalized === 'create an activity' || normalized === 'recommend') {
+  if (!continuingDraft && (normalized.length < 10 || normalized === 'create an activity' || normalized === 'recommend')) {
     const message = assistantMessage(
       'Tell me your mood, interest, location, or preferred time. I can recommend something or help draft a new activity.'
     );
     return { message };
   }
 
-  if (includesAny(normalized, CREATE_KEYWORDS)) {
-    const followUp = followUpForMissingDetails(missingDraftDetails(prompt));
+  if (includesAny(normalizedDraftPrompt, CREATE_KEYWORDS) || continuingDraft) {
+    const followUp = followUpForMissingDetails(missingDraftDetails(conversationDraftPrompt));
     if (followUp) {
       const message = assistantMessage(followUp);
       return { message };
     }
 
-    const draft = generateActivityDraftFromText(prompt);
+    const draft = generateActivityDraftFromText(conversationDraftPrompt);
     const message = assistantMessage(
       'I drafted an activity. Review it first, then use it to prefill the post form.',
       { draft }

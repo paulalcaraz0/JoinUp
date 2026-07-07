@@ -10,11 +10,9 @@ const expoExtra = (Constants.expoConfig?.extra ?? {}) as Record<string, string |
 export const supabaseConfig = {
   url:
     process.env.EXPO_PUBLIC_SUPABASE_URL ??
-    expoExtra.supabaseUrl ??
     expoExtra.EXPO_PUBLIC_SUPABASE_URL,
   anonKey:
     process.env.EXPO_PUBLIC_SUPABASE_KEY ??
-    expoExtra.supabaseAnonKey ??
     expoExtra.EXPO_PUBLIC_SUPABASE_KEY,
 };
 

@@ -27,14 +27,50 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSignIn = async () => {
-    if (!email.trim() || !password.trim()) return;
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !password.trim() || isSubmitting) return;
+
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      Alert.alert('Invalid email', 'Enter a valid email address.');
+      return;
+    }
+
+    if (normalizedEmail.endsWith('.con')) {
+      Alert.alert('Check email address', 'Did you mean .com?');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
-      await signIn(email, password);
+      if (__DEV__) {
+        console.log('[auth] sign-in screen submit', { email: normalizedEmail });
+      }
+      await signIn(normalizedEmail, password);
+      if (__DEV__) {
+        console.log('[auth] sign-in screen navigation decision', {
+          destination: '/(tabs)',
+          reason: 'signIn resolved',
+        });
+      }
       router.replace('/(tabs)');
     } catch (e) {
-      // Error is already set in auth hook state, UI will show it
+      if (__DEV__) {
+        console.log('[auth] sign-in screen caught error', {
+          message: (e as any)?.message,
+          stack: (e as any)?.stack,
+          cause: (e as any)?.cause,
+          query: (e as any)?.query,
+        });
+      }
+      Alert.alert(
+        'Sign in failed',
+        (e as any)?.message ?? 'Could not sign in. Please check your credentials and try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -129,8 +165,8 @@ export default function SignInScreen() {
           <PrimaryButton
             title="Sign In"
             onPress={handleSignIn}
-            loading={isLoading}
-            disabled={!email.trim() || !password.trim()}
+            loading={isSubmitting}
+            disabled={!email.trim() || !password.trim() || isSubmitting}
             style={styles.signInBtn}
           />
         </Animated.View>

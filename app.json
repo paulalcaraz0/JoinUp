@@ -62,8 +62,6 @@
     ],
     "extra": {
       "router": {},
-      "supabaseUrl": "https://jxxcrkjfsspicjrtallf.supabase.co",
-      "supabaseAnonKey": "sb_publishable_zDSqtc-I-NZmuntxq_ULBw_Vqy7Yhoo",
       "eas": {
         "projectId": "170a787f-ebe8-4a29-8e4e-454b5e55c4be"
       }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,8 @@ import { EmptyState } from '../../../components/ui/EmptyState';
 import { NavBar } from '../../../components/layout/NavBar';
 import { useActivities } from '../../../hooks/useActivities';
 import { useAuthStore } from '../../../store/authStore';
+import { supabase } from '../../../lib/supabase';
+import type { AvatarStackItem } from '../../../components/ui/AvatarStack';
 
 export default function ActivityDetailScreen() {
   const { id: rawId } = useLocalSearchParams<{ id: string }>();
@@ -46,11 +48,71 @@ export default function ActivityDetailScreen() {
 
   const [showJoinSheet, setShowJoinSheet] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [participantProfiles, setParticipantProfiles] = useState<Record<string, { displayName: string; photoUrl: string }>>({});
 
   const activity = useMemo(
     () => activities.find((a) => a.id === id) ?? null,
     [activities, id]
   );
+  const participantIds = useMemo(
+    () => Array.from(new Set((activity?.participants ?? []).filter(Boolean))),
+    [activity?.participants]
+  );
+  const participantAvatars = useMemo<AvatarStackItem[]>(
+    () =>
+      participantIds.map((participantId) => ({
+        id: participantId,
+        name: participantProfiles[participantId]?.displayName,
+        photoUrl: participantProfiles[participantId]?.photoUrl,
+      })),
+    [participantIds, participantProfiles]
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchParticipantProfiles = async () => {
+      if (participantIds.length === 0) {
+        if (isActive) {
+          setParticipantProfiles({});
+        }
+        return;
+      }
+
+      try {
+        const { data, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, display_name, photo_url')
+          .in('id', participantIds);
+
+        if (profileError) throw profileError;
+        if (!isActive) return;
+
+        const nextProfiles = (data ?? []).reduce<Record<string, { displayName: string; photoUrl: string }>>(
+          (acc, profile: any) => {
+            acc[profile.id] = {
+              displayName: profile.display_name ?? '',
+              photoUrl: profile.photo_url ?? '',
+            };
+            return acc;
+          },
+          {}
+        );
+
+        setParticipantProfiles(nextProfiles);
+      } catch {
+        if (isActive) {
+          setParticipantProfiles({});
+        }
+      }
+    };
+
+    void fetchParticipantProfiles();
+
+    return () => {
+      isActive = false;
+    };
+  }, [participantIds]);
 
   if (isLoading) {
     return (
@@ -87,8 +149,9 @@ export default function ActivityDetailScreen() {
   const isFull = activity.currentSlots <= 0;
   const joined = activity.maxSlots - activity.currentSlots;
   const dateStr = activity.dateTime
-    ? format(new Date(activity.dateTime), 'EEEE, MMMM d · h:mm a')
+    ? format(new Date(activity.dateTime), 'EEEE, MMMM d, h:mm a')
     : '';
+  const hostInitial = (activity.hostName || 'H').trim().charAt(0).toUpperCase();
 
   const handleJoin = async () => {
     if (!user) return;
@@ -97,6 +160,8 @@ export default function ActivityDetailScreen() {
       const joined = await joinActivity(activity.id, user.uid);
       if (joined) {
         setShowJoinSheet(true);
+      } else {
+        Alert.alert('Could not join', 'This activity may already be full or your request may already be active.');
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to join activity.');
@@ -113,7 +178,10 @@ export default function ActivityDetailScreen() {
         text: 'Leave',
         style: 'destructive',
         onPress: async () => {
-          await leaveActivity(activity.id, user.uid);
+          const left = await leaveActivity(activity.id, user.uid);
+          if (!left) {
+            Alert.alert('Leave failed', error ?? 'Could not leave this activity. Please try again.');
+          }
         },
       },
     ]);
@@ -199,7 +267,11 @@ export default function ActivityDetailScreen() {
         {/* Host info */}
         <Animated.View entering={FadeInDown.delay(250).springify()} style={styles.hostRow}>
           <View style={styles.hostAvatar}>
-            <Ionicons name="person" size={16} color={Colors.white} />
+            {activity.hostPhoto ? (
+              <Image source={{ uri: activity.hostPhoto }} style={styles.hostAvatarImage} resizeMode="cover" />
+            ) : (
+              <Text style={styles.hostAvatarInitial}>{hostInitial}</Text>
+            )}
           </View>
           <Text style={styles.hostText}>
             Hosted by <Text style={styles.hostName}>{activity.hostName}</Text>
@@ -212,7 +284,7 @@ export default function ActivityDetailScreen() {
             <View style={styles.infoIcon}>
               <Ionicons name="calendar-outline" size={20} color={Colors.accent} />
             </View>
-            <View>
+            <View style={styles.infoTextBlock}>
               <Text style={styles.infoLabel}>Date & Time</Text>
               <Text style={styles.infoValue}>{dateStr}</Text>
             </View>
@@ -221,7 +293,7 @@ export default function ActivityDetailScreen() {
             <View style={styles.infoIcon}>
               <Ionicons name="location-outline" size={20} color={Colors.accent} />
             </View>
-            <View>
+            <View style={styles.infoTextBlock}>
               <Text style={styles.infoLabel}>Location</Text>
               <Text style={styles.infoValue}>{activity.location.name}</Text>
             </View>
@@ -238,7 +310,7 @@ export default function ActivityDetailScreen() {
         <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.participantsSection}>
           <Text style={styles.sectionTitle}>Participants</Text>
           <View style={styles.participantsRow}>
-            <AvatarStack count={activity.participants.length} size={32} />
+            <AvatarStack count={activity.participants.length} size={32} avatars={participantAvatars} />
             <Text style={styles.participantCount}>
               {joined}/{activity.maxSlots} spots filled
             </Text>
@@ -249,15 +321,15 @@ export default function ActivityDetailScreen() {
         {/* Reactions */}
         <Animated.View entering={FadeInDown.delay(450).springify()} style={styles.reactionsRow}>
           <TouchableOpacity style={styles.reactionBtn}>
-            <Text>🔥</Text>
+            <Ionicons name="flame-outline" size={15} color={Colors.accent} />
             <Text style={styles.reactionCount}>{activity.reactions.fire}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.reactionBtn}>
-            <Text>❤️</Text>
+            <Ionicons name="heart-outline" size={15} color={Colors.error} />
             <Text style={styles.reactionCount}>{activity.reactions.heart}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.reactionBtn}>
-            <Text>👍</Text>
+            <Ionicons name="thumbs-up-outline" size={15} color={Colors.success} />
             <Text style={styles.reactionCount}>{activity.reactions.like}</Text>
           </TouchableOpacity>
         </Animated.View>
@@ -326,7 +398,9 @@ export default function ActivityDetailScreen() {
           </View>
           <Text style={styles.confirmTitle}>Request Sent</Text>
           <Text style={styles.confirmMessage}>
-            You joined {activity.title} as pending. Chat unlocks automatically when approved.
+            {activity.requiresApproval
+              ? `Your request to join ${activity.title} is pending. Chat unlocks when the host approves it.`
+              : `You're in ${activity.title}. Chat unlocks once your spot is confirmed.`}
           </Text>
           <PrimaryButton
             title="Got it"
@@ -447,6 +521,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.peach,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  hostAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  hostAvatarInitial: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
   },
   hostText: {
     fontFamily: Typography.body,
@@ -470,7 +554,7 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: Spacing.md,
   },
   infoIcon: {
@@ -480,6 +564,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accent + '12',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  infoTextBlock: {
+    flex: 1,
+    minWidth: 0,
   },
   infoLabel: {
     fontFamily: Typography.body,
@@ -491,6 +581,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text,
     marginTop: 1,
+    lineHeight: 20,
+    flexShrink: 1,
   },
   descSection: {
     marginHorizontal: Spacing.lg,

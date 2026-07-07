@@ -32,6 +32,8 @@ import type { Activity } from '../../types';
 import { format } from 'date-fns';
 
 const CATEGORIES = ['Fitness', 'Study', 'Café', 'Outdoors', 'Gaming', 'Social', 'Food', 'Other'];
+const MAX_ACTIVITY_IMAGES = 5;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 type Category = Activity['category'];
 type PickedImage = {
   uri: string;
@@ -76,6 +78,7 @@ type FormErrors = {
   location?: string;
   date?: string;
   maxSlots?: string;
+  image?: string;
 };
 
 const isMissingImagesColumnError = (error: unknown): boolean => {
@@ -191,8 +194,9 @@ export default function CreateActivityScreen() {
       Boolean(category) &&
       locationName.trim().length > 0 &&
       Number.isInteger(parsedMaxSlots) &&
-      parsedMaxSlots > 0,
-    [category, locationName, parsedMaxSlots, title, description]
+      parsedMaxSlots > 0 &&
+      date.getTime() > Date.now(),
+    [category, date, locationName, parsedMaxSlots, title, description]
   );
 
   const validateForm = (): FormErrors => {
@@ -228,6 +232,14 @@ export default function CreateActivityScreen() {
       nextErrors.maxSlots = 'Enter a valid participant count.';
     } else if (parsedMaxSlots > InputLimits.maxActivitySlots) {
       nextErrors.maxSlots = `Keep participant count at ${InputLimits.maxActivitySlots} or less.`;
+    }
+
+    if (date.getTime() <= Date.now()) {
+      nextErrors.date = 'Pick a future date and time.';
+    }
+
+    if (selectedImages.length > MAX_ACTIVITY_IMAGES) {
+      nextErrors.image = `Add up to ${MAX_ACTIVITY_IMAGES} photos.`;
     }
 
     return nextErrors;
@@ -381,8 +393,17 @@ export default function CreateActivityScreen() {
         return;
       }
 
-      // Add the new image to the array
       const picked = result.assets[0];
+      if (selectedImages.length >= MAX_ACTIVITY_IMAGES) {
+        Alert.alert('Photo limit reached', `You can add up to ${MAX_ACTIVITY_IMAGES} photos.`);
+        return;
+      }
+
+      if (typeof picked.fileSize === 'number' && picked.fileSize > MAX_IMAGE_BYTES) {
+        Alert.alert('Photo too large', 'Choose a photo under 8 MB.');
+        return;
+      }
+
       setSelectedImages((prev) => [
         ...prev,
         {
@@ -393,6 +414,7 @@ export default function CreateActivityScreen() {
           fileSize: picked.fileSize,
         },
       ]);
+      setErrors((prev) => ({ ...prev, image: undefined }));
     } catch {
       Alert.alert('Image unavailable', 'Could not select this image right now.');
     }
@@ -448,7 +470,8 @@ export default function CreateActivityScreen() {
     setErrors(validationErrors);
 
     if (Object.keys(validationErrors).length > 0) {
-      Alert.alert('Missing details', 'Please review the highlighted fields.');
+      const firstMessage = Object.values(validationErrors).find(Boolean);
+      Alert.alert('Check activity details', firstMessage ?? 'Please review the highlighted fields.');
       return;
     }
 
@@ -461,9 +484,12 @@ export default function CreateActivityScreen() {
         setIsUploadingCover(true);
         try {
           activityImages = await uploadActivityImages(selectedImages);
-          coverImageUrl = activityImages[0]; // Use first image as cover
-        } catch {
-          Alert.alert('Image upload failed', 'The activity will still be created without images.');
+          coverImageUrl = activityImages[0];
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Could not upload the selected photos.';
+          setErrors((prev) => ({ ...prev, image: `${message} Remove the photo or choose another one.` }));
+          Alert.alert('Photo upload failed', `${message} Remove the photo or choose another one, then try again.`);
+          return;
         } finally {
           setIsUploadingCover(false);
         }
@@ -566,6 +592,7 @@ export default function CreateActivityScreen() {
                 {selectedImages.length > 0 ? 'Add More Photos' : 'Add Cover Photo'}
               </Text>
             </TouchableOpacity>
+            {errors.image ? <Text style={styles.imageError}>{errors.image}</Text> : null}
           </View>
         </Animated.View>
 
@@ -660,7 +687,7 @@ export default function CreateActivityScreen() {
           <TouchableOpacity style={styles.dateBtn} onPress={openDateTimePicker}>
             <Ionicons name="calendar-outline" size={18} color={Colors.accent} />
             <Text style={styles.dateBtnText}>
-              {format(date, 'EEEE, MMMM d, yyyy · h:mm a')}
+              {format(date, 'EEEE, MMMM d, yyyy, h:mm a')}
             </Text>
           </TouchableOpacity>
           {errors.date ? <Text style={styles.inlineError}>{errors.date}</Text> : null}
@@ -790,6 +817,14 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyMed,
     fontSize: 14,
     color: Colors.accent,
+  },
+  imageError: {
+    fontFamily: Typography.body,
+    fontSize: 12,
+    color: Colors.danger,
+    textAlign: 'center',
+    marginTop: Spacing.xs,
+    lineHeight: 17,
   },
   fieldLabel: {
     fontFamily: Typography.bodyBold,

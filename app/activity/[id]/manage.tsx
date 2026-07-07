@@ -131,6 +131,7 @@ export default function ManageActivityScreen() {
     completeHostedActivity,
     approveJoinRequest,
     rejectJoinRequest,
+    updateActivity,
     refetch,
   } = useActivities();
 
@@ -394,6 +395,14 @@ export default function ManageActivityScreen() {
 
       if (error) throw error;
 
+      if (activity) {
+        updateActivity({
+          ...activity,
+          images: updatedImages,
+          coverImage: nextCoverImage ?? undefined,
+        });
+      }
+
       await refetch();
 
       Alert.alert('Success', 'Image added successfully!');
@@ -427,6 +436,14 @@ export default function ManageActivityScreen() {
                 .eq('id', id);
 
               if (error) throw error;
+
+              if (activity) {
+                updateActivity({
+                  ...activity,
+                  images: updatedImages,
+                  coverImage: nextCoverImage ?? undefined,
+                });
+              }
 
               await refetch();
 

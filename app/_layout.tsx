@@ -7,11 +7,12 @@ import { useFonts, Syne_700Bold } from '@expo-google-fonts/syne';
 import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from '@expo-google-fonts/dm-sans';
 import * as SplashScreen from 'expo-splash-screen';
 import { queryClient } from '../lib/queryClient';
-import { StatusBar } from 'react-native';
+import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../store/authStore';
 import { supabase } from '../lib/supabase';
 import { InAppNotificationBanner } from '../components/ui/InAppNotificationBanner';
+import { Colors } from '../constants/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -67,12 +68,37 @@ export default function RootLayout() {
       currentPath.startsWith('/explore') ||
       currentPath.startsWith('/create');
 
+    if (__DEV__) {
+      console.log('[auth] navigation decision', {
+        currentPath,
+        isAuthenticated,
+        isLoading,
+        authBootstrapped,
+        isAuthRoute,
+        isProtectedRoute,
+      });
+    }
+
     if (!isAuthenticated && isProtectedRoute) {
+      if (__DEV__) {
+        console.log('[auth] navigation redirect', {
+          from: currentPath,
+          to: '/(auth)',
+          reason: 'protected route without authenticated user',
+        });
+      }
       router.replace('/(auth)');
       return;
     }
 
     if (isAuthenticated && isAuthRoute) {
+      if (__DEV__) {
+        console.log('[auth] navigation redirect', {
+          from: currentPath,
+          to: '/(tabs)',
+          reason: 'authenticated user on auth route',
+        });
+      }
       router.replace('/(tabs)');
     }
   }, [authBootstrapped, fontsLoaded, isAuthenticated, pathname, router]);
@@ -109,7 +135,12 @@ export default function RootLayout() {
   }, [user?.uid]);
 
   if (!fontsLoaded || !authBootstrapped) {
-    return null;
+    return (
+      <View style={styles.bootContainer}>
+        <StatusBar barStyle="light-content" />
+        <ActivityIndicator size="large" color={Colors.accent} />
+      </View>
+    );
   }
 
   return (
@@ -155,3 +186,12 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  bootContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+});

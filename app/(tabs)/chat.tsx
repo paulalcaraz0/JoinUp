@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { useFocusEffect, usePathname, useRouter } from 'expo-router';
@@ -16,6 +15,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../../constants/theme';
 import { useActivities } from '../../hooks/useActivities';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ChatRowSkeleton } from '../../components/ui/LoadingSkeleton';
 import { useAuthStore } from '../../store/authStore';
 import { getMockChatPreview } from '../../lib/mockChats';
 import { supabase } from '../../lib/supabase';
@@ -267,10 +267,21 @@ export default function ChatListScreen() {
     let isActive = true;
 
     const fetchSupplementalActivities = async () => {
+      let trace: string | null = null;
+      if (__DEV__) {
+        trace = '[chat-list] fetch supplemental activities';
+        console.time(trace);
+      }
+
       const { data, error } = await supabase
         .from('activities_full')
         .select('*')
-        .in('id', missingIds);
+        .in('id', missingIds)
+        .limit(missingIds.length);
+
+      if (__DEV__ && trace) {
+        console.timeEnd(trace);
+      }
 
       if (error || !isActive) return;
 
@@ -301,19 +312,42 @@ export default function ChatListScreen() {
     let isActive = true;
 
     const fetchLatestMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages_full')
-        .select('activity_id, sender_id, sender_name, text, type, created_at')
-        .in('activity_id', chatActivityIds)
-        .order('created_at', { ascending: false });
+      let trace: string | null = null;
+      if (__DEV__) {
+        trace = '[chat-list] fetch latest previews';
+        console.time(trace);
+      }
 
-      if (error || !isActive) return;
+      let previewRows: any[] = [];
+      const { data: rpcRows, error: rpcError } = await supabase.rpc('get_latest_messages_for_activities', {
+        p_activity_ids: chatActivityIds,
+      });
+
+      if (rpcError) {
+        const previewLimit = Math.min(Math.max(chatActivityIds.length * 5, 20), 200);
+        const { data: fallbackRows, error } = await supabase
+          .from('messages_full')
+          .select('activity_id, sender_id, sender_name, text, type, created_at')
+          .in('activity_id', chatActivityIds)
+          .order('created_at', { ascending: false })
+          .limit(previewLimit);
+
+        previewRows = error ? [] : fallbackRows ?? [];
+      } else {
+        previewRows = rpcRows ?? [];
+      }
+
+      if (__DEV__ && trace) {
+        console.timeEnd(trace);
+      }
+
+      if (!isActive) return;
 
       const fallbackSenderIds = Array.from(
         new Set(
-          (data ?? [])
+          previewRows
             .map((row: any) => row.sender_id)
-            .filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && normalizeSenderName((data ?? []).find((item: any) => item.sender_id === value)?.sender_name).length === 0)
+            .filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && normalizeSenderName(previewRows.find((item: any) => item.sender_id === value)?.sender_name).length === 0)
         )
       );
 
@@ -335,7 +369,7 @@ export default function ChatListScreen() {
       }
 
       const next: Record<string, RecentChatMeta> = {};
-      (data ?? []).forEach((row: any) => {
+      previewRows.forEach((row: any) => {
         if (next[row.activity_id]) return;
         const senderName =
           normalizeSenderName(row.sender_name) ||
@@ -583,8 +617,10 @@ export default function ChatListScreen() {
       </View>
 
       {isLoading ? (
-        <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+        <View style={styles.skeletonList}>
+          {[0, 1, 2, 3, 4].map((item) => (
+            <ChatRowSkeleton key={item} />
+          ))}
         </View>
       ) : error && chatActivities.length === 0 ? (
         <EmptyState
@@ -601,6 +637,8 @@ export default function ChatListScreen() {
           icon="chatbubbles-outline"
           title="No chats yet"
           message="Join an activity to start chatting with other participants."
+          actionLabel="Browse activities"
+          onAction={() => router.push('/(tabs)')}
         />
     ) : (
         <FlatList
@@ -608,6 +646,10 @@ export default function ChatListScreen() {
           data={chatActivities}
           keyExtractor={(item) => item.id}
           renderItem={renderChatActivity}
+          initialNumToRender={8}
+          maxToRenderPerBatch={6}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
           contentContainerStyle={[
             styles.listContent,
             { paddingBottom: insets.bottom + Spacing.xl * 3 },
@@ -634,10 +676,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
     color: Colors.text,
   },
-  loadingWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  skeletonList: {
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
   },
   listContent: {
     paddingHorizontal: Spacing.lg,

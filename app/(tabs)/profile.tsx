@@ -9,7 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -90,7 +90,6 @@ export default function ProfileScreen() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
-  const [isSubmittingVerification, setIsSubmittingVerification] = useState(false);
   const [authActionLoading, setAuthActionLoading] = useState<'switch' | 'logout' | 'delete' | null>(null);
   const [editName, setEditName] = useState(user?.displayName ?? '');
   const [editLocation, setEditLocation] = useState(user?.location ?? '');
@@ -134,6 +133,7 @@ export default function ProfileScreen() {
           .from('activities')
           .select('id, title, category, cover_image, date_time, location_name, status, host_id')
           .in('id', joinedIds)
+          .eq('status', 'active')
           .order('date_time', { ascending: true });
 
         if (joinedActivitiesError) throw joinedActivitiesError;
@@ -147,6 +147,7 @@ export default function ProfileScreen() {
         .from('activities')
         .select('id, title, category, cover_image, date_time, location_name, status, host_id')
         .eq('host_id', user.uid)
+        .eq('status', 'active')
         .order('date_time', { ascending: true });
 
       if (hostedError) throw hostedError;
@@ -174,6 +175,12 @@ export default function ProfileScreen() {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchHistory();
+    }, [fetchHistory])
+  );
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -299,119 +306,6 @@ export default function ProfileScreen() {
       setIsUploadingPhoto(false);
     }
   }, [isUploadingPhoto, updateUser, uploadProfilePhoto, user?.uid]);
-
-  const getVerificationCopy = useCallback(() => {
-    switch (user?.verificationStatus) {
-      case 'verified':
-        return {
-          icon: 'shield-checkmark' as const,
-          title: 'ID verified',
-          body: 'Your profile has an added trust badge.',
-          action: 'Verified',
-          color: Colors.success,
-        };
-      case 'pending':
-        return {
-          icon: 'time-outline' as const,
-          title: 'Verification pending',
-          body: 'Your ID was submitted and is waiting for review.',
-          action: 'Pending',
-          color: Colors.warning,
-        };
-      case 'rejected':
-        return {
-          icon: 'alert-circle-outline' as const,
-          title: 'Verification needs review',
-          body: 'Your last submission was not approved. You can submit a clearer ID photo.',
-          action: 'Resubmit ID',
-          color: Colors.error,
-        };
-      default:
-        return {
-          icon: 'shield-outline' as const,
-          title: 'Verify your ID',
-          body: 'Submit a government ID to help people know your profile is real.',
-          action: 'Start',
-          color: Colors.accent,
-        };
-    }
-  }, [user?.verificationStatus]);
-
-  const handleSubmitIdVerification = useCallback(async () => {
-    if (!user?.uid || isSubmittingVerification) return;
-    if (user.verificationStatus === 'verified' || user.verificationStatus === 'pending') return;
-
-    Alert.alert(
-      'Submit ID for review?',
-      'Use a clear photo of your government ID. JoinUp stores this privately for manual review and only shows your verification status publicly.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Choose ID photo',
-          onPress: async () => {
-            try {
-              setIsSubmittingVerification(true);
-
-              const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-              if (!permission.granted) {
-                Alert.alert('Permission needed', 'Please allow photo access to upload your ID.');
-                return;
-              }
-
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ['images'],
-                allowsEditing: true,
-                quality: 0.9,
-                base64: true,
-              });
-
-              if (result.canceled || !result.assets?.[0]) return;
-
-              const asset = result.assets[0];
-              const extension = (asset.uri.split('.').pop() ?? 'jpg').split('?')[0].toLowerCase();
-              const safeExtension = ['jpg', 'jpeg', 'png', 'webp'].includes(extension) ? extension : 'jpg';
-              const documentPath = `${user.uid}/${Date.now()}.${safeExtension}`;
-
-              let uploadBody: Blob | ArrayBuffer;
-              if (asset.base64) {
-                uploadBody = decode(asset.base64);
-              } else {
-                const response = await withTimeout(fetch(asset.uri), 15000, 'Timed out while reading selected ID photo.');
-                uploadBody = await withTimeout(response.blob(), 15000, 'Timed out while preparing selected ID photo.');
-              }
-
-              const { error: uploadError } = await withTimeout(
-                supabase.storage
-                  .from('identity-verifications')
-                  .upload(documentPath, uploadBody, {
-                    upsert: false,
-                    contentType: asset.mimeType || 'image/jpeg',
-                  }),
-                25000,
-                'Timed out while uploading ID photo.'
-              );
-
-              if (uploadError) throw uploadError;
-
-              const { data, error } = await supabase.rpc('submit_identity_verification', {
-                p_document_path: documentPath,
-              });
-
-              if (error) throw error;
-              if (!data) throw new Error('Verification submission was not completed.');
-
-              updateUser({ verificationStatus: 'pending' });
-              Alert.alert('Submitted', 'Your ID was submitted for review.');
-            } catch (error: any) {
-              Alert.alert('Verification failed', error.message ?? 'Could not submit your ID right now.');
-            } finally {
-              setIsSubmittingVerification(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [isSubmittingVerification, updateUser, user?.uid, user?.verificationStatus]);
 
   const handleSaveProfile = useCallback(async () => {
     if (!user?.uid) return;
@@ -567,9 +461,15 @@ export default function ProfileScreen() {
 
   const joinedActivities = useMemo<HistoryActivity[]>(() => {
     const activityMap = new Map(activities.map((activity) => [activity.id, activity]));
+    const existingHistoryIds = new Set([
+      ...hostedActivities.map((activity) => activity.id),
+      ...pastActivities.map((activity) => activity.id),
+    ]);
+    const shouldFilterAgainstHistory = existingHistoryIds.size > 0;
     const items: HistoryActivity[] = [];
 
     joinedActivityIds.forEach((activityId) => {
+        if (shouldFilterAgainstHistory && !existingHistoryIds.has(activityId)) return;
         const source = activityMap.get(activityId);
         if (!source) return;
 
@@ -589,7 +489,28 @@ export default function ProfileScreen() {
     return items.sort(
       (left, right) => new Date(left.dateTime).getTime() - new Date(right.dateTime).getTime()
     );
-  }, [activities, joinStatuses, joinedActivityIds]);
+  }, [activities, hostedActivities, joinStatuses, joinedActivityIds, pastActivities]);
+
+  const removeHistoryActivity = useCallback((activityId: string) => {
+    setHostedActivities((prev) => prev.filter((activity) => activity.id !== activityId));
+    setPastActivities((prev) => prev.filter((activity) => activity.id !== activityId));
+  }, []);
+
+  const handleOpenHistoryActivity = useCallback(async (activityId: string) => {
+    const { data, error: lookupError } = await supabase
+      .from('activities')
+      .select('id, status')
+      .eq('id', activityId)
+      .maybeSingle();
+
+    if (lookupError || !data || data.status !== 'active') {
+      removeHistoryActivity(activityId);
+      Alert.alert('Activity removed', 'This activity is no longer available, so it was removed from your profile.');
+      return;
+    }
+
+    router.push(`/activity/${activityId}`);
+  }, [removeHistoryActivity, router]);
 
   const getTabActivities = useCallback(() => {
     switch (activeTab) {
@@ -611,7 +532,6 @@ export default function ProfileScreen() {
     [hostedActivities.length, joinedActivities.length, user?.rating, user?.ratingCount]
   );
 
-  const verificationCopy = getVerificationCopy();
   const memberSince = user?.createdAt ? format(new Date(user.createdAt), 'MMM yyyy') : 'New member';
   const avatarInitial = (user?.displayName || 'U').trim().charAt(0).toUpperCase();
 
@@ -668,48 +588,12 @@ export default function ProfileScreen() {
           </Text>
           <Text style={styles.location}>{user?.location || 'No location set'}</Text>
           <Text style={styles.memberSince}>Member since {memberSince}</Text>
-          <View style={[styles.verificationBadge, { backgroundColor: verificationCopy.color + '18' }]}>
-            <Ionicons name={verificationCopy.icon} size={14} color={verificationCopy.color} />
-            <Text style={[styles.verificationBadgeText, { color: verificationCopy.color }]}>
-              {verificationCopy.title}
-            </Text>
-          </View>
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() => setShowEditSheet(true)}
           >
             <Text style={styles.editBtnText}>Edit Profile</Text>
           </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <View style={[styles.verificationCard, Shadows.soft]}>
-            <View style={[styles.verificationIconWrap, { backgroundColor: verificationCopy.color + '16' }]}>
-              <Ionicons name={verificationCopy.icon} size={22} color={verificationCopy.color} />
-            </View>
-            <View style={styles.verificationTextWrap}>
-              <Text style={styles.verificationTitle}>{verificationCopy.title}</Text>
-              <Text style={styles.verificationBody}>{verificationCopy.body}</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.verificationAction,
-                (user?.verificationStatus === 'verified' || user?.verificationStatus === 'pending') && styles.verificationActionDisabled,
-              ]}
-              onPress={handleSubmitIdVerification}
-              disabled={
-                isSubmittingVerification ||
-                user?.verificationStatus === 'verified' ||
-                user?.verificationStatus === 'pending'
-              }
-            >
-              {isSubmittingVerification ? (
-                <ActivityIndicator color={Colors.white} size="small" />
-              ) : (
-                <Text style={styles.verificationActionText}>{verificationCopy.action}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* Stats */}
@@ -802,7 +686,9 @@ export default function ProfileScreen() {
                 >
                   <TouchableOpacity
                     style={[styles.miniCard, Shadows.card]}
-                    onPress={() => router.push(`/activity/${activity.id}`)}
+                    onPress={() => {
+                      void handleOpenHistoryActivity(activity.id);
+                    }}
                   >
                     <View style={[styles.miniCardImage, { backgroundColor: chipColor + '20' }]}>
                       {activity.coverImage ? (
@@ -1152,19 +1038,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 3,
   },
-  verificationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: BorderRadius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    marginTop: Spacing.xs,
-  },
-  verificationBadgeText: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 12,
-  },
   editBtn: {
     marginTop: Spacing.md,
     borderWidth: 1,
@@ -1207,56 +1080,6 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-  },
-  verificationCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.card,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    padding: Spacing.md,
-  },
-  verificationIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  verificationTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  verificationTitle: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 15,
-    color: Colors.text,
-    marginBottom: 2,
-  },
-  verificationBody: {
-    fontFamily: Typography.body,
-    fontSize: 12,
-    color: Colors.slate,
-    lineHeight: 17,
-  },
-  verificationAction: {
-    minWidth: 76,
-    minHeight: 38,
-    borderRadius: BorderRadius.pill,
-    backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.md,
-  },
-  verificationActionDisabled: {
-    backgroundColor: Colors.slate,
-  },
-  verificationActionText: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 12,
-    color: Colors.white,
   },
   sectionTitle: {
     fontFamily: Typography.bodyBold,

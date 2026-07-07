@@ -6,30 +6,12 @@ import { MOCK_ACTIVITIES, SHOULD_USE_MOCK_ACTIVITIES } from '../lib/mockActiviti
 import { useActivityStore } from '../store/activityStore';
 import { useAuthStore } from '../store/authStore';
 import { DatabaseTables, ParticipantStatus, ActivityStatus, NotificationTypes, ActivityCategories } from '../lib/constants/database';
-import { mapActivity, normalizeImageUrl } from '../lib/mappers/activity';
+import { mapActivity } from '../lib/mappers/activity';
 import { mapNotification } from '../lib/mappers/notification';
 import { activityService } from '../lib/api/activityService';
 import { notificationService } from '../lib/api/notificationService';
 
 export type { ActivityStatus, ParticipantStatus, NotificationTypes } from '../lib/constants/database';
-
-function isMissingImagesColumnError(error: unknown): boolean {
-  const joined = [
-    (error as any)?.code,
-    (error as any)?.message,
-    (error as any)?.details,
-    (error as any)?.hint,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-
-  return (
-    joined.includes('pgrst204') ||
-    joined.includes('schema cache') && joined.includes('images') && joined.includes('activities') ||
-    joined.includes('column') && joined.includes('images') && joined.includes('does not exist')
-  );
-}
 
 let runtimeUserId: string | null = null;
 let runtimeParticipantChannel: any = null;
@@ -41,7 +23,20 @@ let runtimeFetchJoinStatuses: (() => Promise<void>) | null = null;
 let runtimeResolveDueJoinRequests: (() => Promise<void>) | null = null;
 let runtimeResolverInFlight = false;
 
-const RESOLVER_INTERVAL_MS = 10000;
+const RESOLVER_INTERVAL_MS = 60000;
+const INITIAL_ACTIVITY_LIMIT = 40;
+const ACTIVITY_QUERY_TIMEOUT_MS = 8000;
+const ACTIVITY_ENRICHMENT_TIMEOUT_MS = 6000;
+const ACTIVITY_CACHE_KEY = 'activitiesCache:v1';
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+}
 
 function teardownActivitiesRuntime() {
   if (runtimeParticipantChannel) {
@@ -84,6 +79,49 @@ export function useActivities() {
   const joinStatusesRef = useRef<Record<string, JoinRequestStatus>>({});
   const mockDecisionTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const resolverUnavailableRef = useRef(false);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const hydrateCachedActivities = async () => {
+      if (activities.length > 0) return;
+
+      try {
+        const raw = await AsyncStorage.getItem(ACTIVITY_CACHE_KEY);
+        if (!isActive || !raw) return;
+
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return;
+
+        const cached = parsed.filter((activity): activity is Activity => (
+          activity &&
+          typeof activity.id === 'string' &&
+          typeof activity.title === 'string'
+        ));
+
+        if (cached.length > 0) {
+          setActivities(cached);
+          setIsLoading(false);
+        }
+      } catch {
+        // Cache is best-effort only; the network fetch below remains authoritative.
+      }
+    };
+
+    void hydrateCachedActivities();
+
+    return () => {
+      isActive = false;
+    };
+  }, [activities.length, setActivities]);
+
+  const persistActivitiesCache = useCallback(async (nextActivities: Activity[]) => {
+    try {
+      await AsyncStorage.setItem(ACTIVITY_CACHE_KEY, JSON.stringify(nextActivities));
+    } catch {
+      // Cache is best-effort and should never block the feed.
+    }
+  }, []);
 
   const persistLocalJoinedIds = useCallback(async (ids: string[]) => {
     if (!user?.uid) return;
@@ -281,13 +319,28 @@ export function useActivities() {
       return;
     }
 
-    const { data, error: fetchError } = await supabase
-      .from('participants')
-      .select('activity_id, status')
-      .eq('user_id', user.uid)
-      .neq('status', 'cancelled');
-
     const joinedIds = Array.from(new Set([...(user.activitiesJoined ?? []), ...localJoinedIds]));
+    let data: any[] | null = null;
+    let fetchError: any = null;
+
+    try {
+      const result = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from('participants')
+            .select('activity_id, status')
+            .eq('user_id', user.uid)
+            .neq('status', 'cancelled')
+        ),
+        ACTIVITY_ENRICHMENT_TIMEOUT_MS,
+        'Join status refresh timed out.'
+      );
+
+      data = result.data;
+      fetchError = result.error;
+    } catch (err) {
+      fetchError = err;
+    }
 
     if (fetchError) {
       // Preserve known statuses on transient failures so chat access does not flicker.
@@ -371,105 +424,134 @@ export function useActivities() {
   }, [user?.uid]);
 
   const fetchActivities = useCallback(async () => {
+    let trace: string | null = null;
+
     try {
-      setIsLoading(true);
+      if (__DEV__) {
+        trace = '[activities] fetch active feed';
+        console.time(trace);
+      }
+
+      setIsLoading(activities.length === 0);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('activities_full')
-        .select('*')
-        .eq('status', 'active')
-        .order('date_time', { ascending: true });
+      const { data, error: fetchError } = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from('activities')
+            .select('id, title, description, category, location_name, location_lat, location_lng, date_time, max_slots, cover_image, images, requires_approval, status, host_id, created_at')
+            .eq('status', 'active')
+            .order('date_time', { ascending: true })
+            .limit(INITIAL_ACTIVITY_LIMIT)
+        ),
+        ACTIVITY_QUERY_TIMEOUT_MS,
+        'Activities are taking too long to load. Pull to refresh or try again in a moment.'
+      );
 
       if (fetchError) throw fetchError;
 
       if (data) {
-        // Fetch participant IDs for each activity
         const activityIds = data.map((a: any) => a.id);
-        let parts: Array<{ activity_id: string; user_id: string }> = [];
-        let activityMediaById: Record<string, { cover_image?: string | null; images?: string[] | null }> = {};
-
-        if (activityIds.length > 0) {
-          const { data: participantsData, error: participantsError } = await supabase
-            .from('participants')
-            .select('activity_id, user_id')
-            .in('activity_id', activityIds)
-            .eq('status', 'approved');
-
-          if (participantsError) throw participantsError;
-          parts = participantsData ?? [];
-
-          try {
-            let mediaRows:
-              | Array<{ id: string; cover_image: string | null; images?: string[] | null }>
-              | null = null;
-
-            let { data: activityMediaRows, error: activityMediaError } = await supabase
-              .from('activities')
-              .select('id, cover_image, images')
-              .in('id', activityIds);
-
-            if (activityMediaError && isMissingImagesColumnError(activityMediaError)) {
-              const { data: fallbackRows, error: fallbackError } = await supabase
-                .from('activities')
-                .select('id, cover_image')
-                .in('id', activityIds);
-
-              if (fallbackError) {
-                throw fallbackError;
-              }
-
-              mediaRows = (fallbackRows ?? []).map((row: any) => ({
-                id: row.id,
-                cover_image: row.cover_image ?? null,
-                images: null,
-              }));
-            } else {
-              if (activityMediaError) {
-                throw activityMediaError;
-              }
-
-              mediaRows = activityMediaRows ?? [];
-            }
-
-            activityMediaById = (mediaRows ?? []).reduce<Record<string, { cover_image?: string | null; images?: string[] | null }>>(
-              (acc, row) => {
-                acc[row.id] = {
-                  cover_image: row.cover_image ?? null,
-                  images: Array.isArray(row.images) ? row.images : row.images ?? null,
-                };
-                return acc;
-              },
-              {}
-            );
-          } catch {
-            // Best-effort enrichment: keep using activities_full data when direct table media fetch is unavailable.
-            activityMediaById = {};
-          }
-        }
-
-        const participantMap: Record<string, string[]> = {};
-        (parts ?? []).forEach((p: any) => {
-          if (!participantMap[p.activity_id]) participantMap[p.activity_id] = [];
-          participantMap[p.activity_id].push(p.user_id);
-        });
-
-        const remoteActivities = data.map((row: any) =>
+        const hostIds = Array.from(
+          new Set(
+            data
+              .map((activity: any) => activity.host_id)
+              .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0)
+          )
+        );
+        const baseActivities = data.map((row: any) =>
           mapActivity({
             ...row,
-            ...activityMediaById[row.id],
-            participant_ids: participantMap[row.id] ?? [],
+            host_name: '',
+            host_photo: '',
+            participant_ids: [],
+            current_slots: Number(row.max_slots ?? 0),
           })
         );
 
-        setActivities(mergeActivities(remoteActivities));
+        const mergedBaseActivities = mergeActivities(baseActivities);
+        setActivities(mergedBaseActivities);
+        void persistActivitiesCache(mergedBaseActivities);
+        setIsLoading(false);
+
+        if (activityIds.length === 0) return;
+
+        try {
+          const [participantsResult, hostsResult] = await Promise.all([
+            withTimeout(
+              Promise.resolve(
+                supabase
+                  .from('participants')
+                  .select('activity_id, user_id')
+                  .in('activity_id', activityIds)
+                  .in('status', ['joined', 'approved'])
+                  .limit(INITIAL_ACTIVITY_LIMIT * 100)
+              ),
+              ACTIVITY_ENRICHMENT_TIMEOUT_MS,
+              'Participant enrichment timed out.'
+            ),
+            hostIds.length > 0
+              ? withTimeout(
+                  Promise.resolve(
+                    supabase
+                      .from('profiles')
+                      .select('id, display_name, photo_url')
+                      .in('id', hostIds)
+                      .limit(hostIds.length)
+                  ),
+                  ACTIVITY_ENRICHMENT_TIMEOUT_MS,
+                  'Host enrichment timed out.'
+                )
+              : Promise.resolve({ data: [], error: null }),
+          ]);
+
+          if (participantsResult.error || hostsResult.error) return;
+
+          const participantMap: Record<string, string[]> = {};
+          (participantsResult.data ?? []).forEach((p: any) => {
+            if (!participantMap[p.activity_id]) participantMap[p.activity_id] = [];
+            participantMap[p.activity_id].push(p.user_id);
+          });
+
+          const hostsById = (hostsResult.data ?? []).reduce<Record<string, { display_name?: string | null; photo_url?: string | null }>>(
+            (acc, row: any) => {
+              acc[row.id] = {
+                display_name: row.display_name ?? null,
+                photo_url: row.photo_url ?? null,
+              };
+              return acc;
+            },
+            {}
+          );
+
+          const enrichedActivities = data.map((row: any) =>
+            mapActivity({
+              ...row,
+              host_name: hostsById[row.host_id]?.display_name ?? '',
+              host_photo: hostsById[row.host_id]?.photo_url ?? '',
+              participant_ids: participantMap[row.id] ?? [],
+              current_slots: Math.max(0, Number(row.max_slots ?? 0) - (participantMap[row.id]?.length ?? 0)),
+            })
+          );
+
+          const mergedEnrichedActivities = mergeActivities(enrichedActivities);
+          setActivities(mergedEnrichedActivities);
+          void persistActivitiesCache(mergedEnrichedActivities);
+        } catch (enrichmentError) {
+          if (__DEV__) {
+            console.warn('[activities] enrichment skipped', enrichmentError);
+          }
+        }
       }
     } catch (err: any) {
       setError(err.message ?? 'Failed to load activities');
     } finally {
       setIsLoading(false);
+      if (__DEV__ && trace) {
+        console.timeEnd(trace);
+      }
     }
-  }, [mergeActivities, setActivities]);
+  }, [activities.length, mergeActivities, persistActivitiesCache, setActivities]);
 
   useEffect(() => {
     if (runtimeUserId && runtimeUserId !== user?.uid) {
@@ -648,12 +730,28 @@ export function useActivities() {
     try {
       const existingStatus = joinStatuses[activityId];
       if (existingStatus && existingStatus !== 'cancelled') {
+        setError(
+          existingStatus === 'pending'
+            ? 'Your join request is already waiting for approval.'
+            : 'You already have an active join status for this activity.'
+        );
         return false;
       }
 
       const currentActivity = activities.find((activity) => activity.id === activityId);
 
-      if (!currentActivity) return false;
+      if (!currentActivity) {
+        setError('This activity is no longer available.');
+        return false;
+      }
+      if (currentActivity.hostId === userId) {
+        setError('Hosts cannot join their own activity.');
+        return false;
+      }
+      if (currentActivity.currentSlots <= 0) {
+        setError('This activity is already full.');
+        return false;
+      }
 
       setJoinStatuses((prev) => ({ ...prev, [activityId]: 'pending' }));
 
@@ -1050,6 +1148,7 @@ export function useActivities() {
     deleteHostedActivity,
     cancelHostedActivity,
     completeHostedActivity,
+    updateActivity,
     getJoinStatus,
     canAccessChat,
     getActivity,

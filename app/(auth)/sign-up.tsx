@@ -25,7 +25,7 @@ const INTEREST_OPTIONS = ['Fitness', 'Study', 'Outdoors', 'Gaming', 'Café', 'Mu
 export default function SignUpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signUp, signInWithGoogle, isLoading, error } = useAuth();
+  const { signUp, signInWithGoogle, isLoading, error } = useAuth({ initialize: false });
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');

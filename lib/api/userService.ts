@@ -2,6 +2,8 @@ import { DatabaseTables } from '../constants/database';
 import { mapUserRow } from '../mappers/user';
 import { supabase } from '../supabase';
 
+const PROFILE_PAGE_SIZE = 50;
+
 export const userService = {
   async getProfile(userId: string) {
     const { data, error } = await supabase
@@ -20,7 +22,8 @@ export const userService = {
       .select(
         'id, display_name, photo_url, bio, location, age_range, interests, activities_joined, rating, rating_count, verification_status, created_at'
       )
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(PROFILE_PAGE_SIZE);
 
     if (error) throw error;
     return (data ?? []).map(mapUserRow);

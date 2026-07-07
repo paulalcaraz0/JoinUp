@@ -93,6 +93,9 @@ export interface Notification {
   type: 'join' | 'comment' | 'reminder' | 'approval' | 'chat' | 'update';
   title: string;
   body: string;
+  actorId?: string;
+  actorName?: string;
+  actorPhoto?: string;
   activityId: string | null;
   read: boolean;
   createdAt: string; // ISO 8601

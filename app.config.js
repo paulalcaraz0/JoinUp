@@ -1,5 +1,3 @@
-require('dotenv').config();
-
 const appJson = require('./app.json');
 
 module.exports = ({ config } = {}) => {
@@ -9,8 +7,8 @@ module.exports = ({ config } = {}) => {
     ...baseConfig,
     extra: {
       ...(baseConfig.extra ?? {}),
-      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? baseConfig.extra?.supabaseUrl,
-      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_KEY ?? baseConfig.extra?.supabaseAnonKey,
+      EXPO_PUBLIC_SUPABASE_URL: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      EXPO_PUBLIC_SUPABASE_KEY: process.env.EXPO_PUBLIC_SUPABASE_KEY,
     },
   };
 };

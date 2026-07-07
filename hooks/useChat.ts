@@ -11,6 +11,7 @@ const MOCK_CHAT_STORAGE_PREFIX = 'mockChatMessages:v1:';
 const UNREAD_CHAT_STORAGE_PREFIX = 'chatUnreadActivityIds:v1:';
 const CHAT_IMAGE_BUCKET = 'chat-images';
 const CHAT_IMAGE_SIGNED_URL_TTL_SECONDS = 60 * 60;
+const INITIAL_MESSAGE_LIMIT = 50;
 
 function mockChatStorageKey(activityId: string) {
   return `${MOCK_CHAT_STORAGE_PREFIX}${activityId}`;
@@ -218,12 +219,21 @@ async function mapMessage(row: any): Promise<Message> {
 export function useChat(activityId: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const isMockThread = activityId.startsWith('mock-');
   const channelRef = useRef<any>(null);
 
   const fetchMessages = useCallback(async () => {
+    let trace: string | null = null;
+
     setIsLoading(true);
     try {
+      setError(null);
+      if (__DEV__) {
+        trace = `[chat] fetch messages ${activityId}`;
+        console.time(trace);
+      }
+
       if (isMockThread) {
         const seededMessages = await resolveMessageImages(getMockChatMessages(activityId));
         const persistedMessages = await readPersistedMockMessages(activityId);
@@ -235,13 +245,23 @@ export function useChat(activityId: string) {
         .from('messages_full')
         .select('*')
         .eq('activity_id', activityId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false })
+        .limit(INITIAL_MESSAGE_LIMIT);
+
+      if (error) {
+        throw error;
+      }
 
       if (!error && data) {
-        setMessages(await Promise.all(data.map(mapMessage)));
+        setMessages(await Promise.all([...data].reverse().map(mapMessage)));
       }
+    } catch (err: any) {
+      setError(err?.message ?? 'Could not load messages. Pull to refresh and try again.');
     } finally {
       setIsLoading(false);
+      if (__DEV__ && trace) {
+        console.timeEnd(trace);
+      }
     }
   }, [activityId, isMockThread]);
 
@@ -363,13 +383,20 @@ export function useChat(activityId: string) {
         .select()
         .single();
 
-      if (!error && data) {
-        const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
-        setMessages((prev) => {
-          if (prev.some((message) => message.id === nextMessage.id)) return prev;
-          return [...prev, nextMessage];
-        });
+      if (error) {
+        throw error;
       }
+
+      if (!data) {
+        throw new Error('Message could not be saved. Please try again.');
+      }
+
+      setError(null);
+      const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
+      setMessages((prev) => {
+        if (prev.some((message) => message.id === nextMessage.id)) return prev;
+        return [...prev, nextMessage];
+      });
     },
     [activityId, isMockThread]
   );
@@ -412,13 +439,16 @@ export function useChat(activityId: string) {
         throw error;
       }
 
-      if (data) {
-        const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
-        setMessages((prev) => {
-          if (prev.some((message) => message.id === nextMessage.id)) return prev;
-          return [...prev, nextMessage];
-        });
+      if (!data) {
+        throw new Error('Image message could not be saved. Please try again.');
       }
+
+      setError(null);
+      const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
+      setMessages((prev) => {
+        if (prev.some((message) => message.id === nextMessage.id)) return prev;
+        return [...prev, nextMessage];
+      });
     },
     [activityId, isMockThread]
   );
@@ -458,13 +488,20 @@ export function useChat(activityId: string) {
         .select()
         .single();
 
-      if (!error && data) {
-        const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
-        setMessages((prev) => {
-          if (prev.some((message) => message.id === nextMessage.id)) return prev;
-          return [...prev, nextMessage];
-        });
+      if (error) {
+        throw error;
       }
+
+      if (!data) {
+        throw new Error('Location message could not be saved. Please try again.');
+      }
+
+      setError(null);
+      const nextMessage = await mapMessage({ ...data, sender_name: senderName, sender_photo: '' });
+      setMessages((prev) => {
+        if (prev.some((message) => message.id === nextMessage.id)) return prev;
+        return [...prev, nextMessage];
+      });
     },
     [activityId, isMockThread]
   );
@@ -501,5 +538,5 @@ export function useChat(activityId: string) {
 
   const pinnedMessage = messages.find((message) => message.isPinned) ?? null;
 
-  return { messages, isLoading, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch: fetchMessages };
+  return { messages, isLoading, error, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch: fetchMessages };
 }

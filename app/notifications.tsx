@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -48,6 +49,11 @@ const NotificationRow = React.memo(function NotificationRow({
   isDeleting,
 }: NotificationRowProps) {
   const icon = ICON_MAP[item.type] ?? { name: 'notifications' as keyof typeof Ionicons.glyphMap, color: Colors.slate };
+  const showActorAvatar = item.type === 'join' && Boolean(item.actorId);
+  const actorInitial = (item.actorName || 'U').trim().charAt(0).toUpperCase();
+  const bodyText = item.type === 'join' && item.actorName
+    ? `${item.actorName} wants to join this activity.`
+    : item.body;
   const timeAgo = item.createdAt
     ? formatDistanceToNow(parseISO(item.createdAt), { addSuffix: true })
     : '';
@@ -67,13 +73,23 @@ const NotificationRow = React.memo(function NotificationRow({
         activeOpacity={0.7}
         disabled={isDeleting}
       >
-        <View style={[styles.iconCircle, { backgroundColor: icon.color + '18' }]}>
-          <Ionicons name={icon.name} size={20} color={icon.color} />
-        </View>
+        {showActorAvatar ? (
+          item.actorPhoto ? (
+            <Image source={{ uri: item.actorPhoto }} style={styles.actorPhoto} resizeMode="cover" />
+          ) : (
+            <View style={styles.actorFallback}>
+              <Text style={styles.actorInitial}>{actorInitial}</Text>
+            </View>
+          )
+        ) : (
+          <View style={[styles.iconCircle, { backgroundColor: icon.color + '18' }]}>
+            <Ionicons name={icon.name} size={20} color={icon.color} />
+          </View>
+        )}
         <View style={styles.notifContent}>
           <Text style={styles.notifTitle}>{item.title}</Text>
           <Text style={styles.notifBody} numberOfLines={2}>
-            {item.body}
+            {bodyText}
           </Text>
           <Text style={styles.notifTime}>{timeAgo}</Text>
         </View>
@@ -97,18 +113,14 @@ const NotificationRow = React.memo(function NotificationRow({
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 60).springify()}>
-      {item.read ? (
-        <Swipeable
-          renderRightActions={renderRightActions}
-          overshootRight={false}
-          rightThreshold={42}
-          friction={2}
-        >
-          {row}
-        </Swipeable>
-      ) : (
-        row
-      )}
+      <Swipeable
+        renderRightActions={renderRightActions}
+        overshootRight={false}
+        rightThreshold={42}
+        friction={2}
+      >
+        {row}
+      </Swipeable>
     </Animated.View>
   );
 });
@@ -120,6 +132,8 @@ export default function NotificationsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingIds, setDeletingIds] = useState<string[]>([]);
+  const [undoNotification, setUndoNotification] = useState<Notification | null>(null);
+  const deleteTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.uid) {
@@ -159,6 +173,11 @@ export default function NotificationsScreen() {
         },
         (payload: any) => {
           if (payload.eventType === 'INSERT' && payload.new) {
+            if (payload.new.type === 'join') {
+              void fetchNotifications();
+              return;
+            }
+
             setNotifications((prev) => {
               const incoming = mapNotification(payload.new);
               if (prev.some((item) => item.id === incoming.id)) {
@@ -224,25 +243,53 @@ export default function NotificationsScreen() {
   }, [router]);
 
   const handleDeleteNotification = useCallback((notif: Notification) => {
-    if (!notif.read || deletingIds.includes(notif.id)) return;
+    if (deletingIds.includes(notif.id)) return;
 
     setDeletingIds((prev) => [...prev, notif.id]);
     setNotifications((prev) => prev.filter((item) => item.id !== notif.id));
+    setUndoNotification(notif);
 
-    void notificationService.delete(notif.id).catch((err: unknown) => {
-      setNotifications((prev) => {
-        if (prev.some((item) => item.id === notif.id)) return prev;
-        return [notif, ...prev].sort(
-          (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-        );
+    if (deleteTimersRef.current[notif.id]) {
+      clearTimeout(deleteTimersRef.current[notif.id]);
+    }
+
+    deleteTimersRef.current[notif.id] = setTimeout(() => {
+      void notificationService.delete(notif.id).catch((err: unknown) => {
+        setNotifications((prev) => {
+          if (prev.some((item) => item.id === notif.id)) return prev;
+          return [notif, ...prev].sort(
+            (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+          );
+        });
+
+        const message = err instanceof Error ? err.message : 'Could not delete this notification.';
+        Alert.alert('Delete failed', message);
+      }).finally(() => {
+        delete deleteTimersRef.current[notif.id];
+        setDeletingIds((prev) => prev.filter((id) => id !== notif.id));
+        setUndoNotification((current) => current?.id === notif.id ? null : current);
       });
-
-      const message = err instanceof Error ? err.message : 'Could not delete this notification.';
-      Alert.alert('Delete failed', message);
-    }).finally(() => {
-      setDeletingIds((prev) => prev.filter((id) => id !== notif.id));
-    });
+    }, 4500);
   }, [deletingIds]);
+
+  const handleUndoDelete = useCallback(() => {
+    if (!undoNotification) return;
+
+    const restored = undoNotification;
+    if (deleteTimersRef.current[restored.id]) {
+      clearTimeout(deleteTimersRef.current[restored.id]);
+      delete deleteTimersRef.current[restored.id];
+    }
+
+    setDeletingIds((prev) => prev.filter((id) => id !== restored.id));
+    setNotifications((prev) => {
+      if (prev.some((item) => item.id === restored.id)) return prev;
+      return [restored, ...prev].sort(
+        (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      );
+    });
+    setUndoNotification(null);
+  }, [undoNotification]);
 
   const renderNotification = useCallback(
     ({ item, index }: ListRenderItemInfo<Notification>) => (
@@ -300,14 +347,28 @@ export default function NotificationsScreen() {
           }}
         />
       ) : (
-        <FlatList
-          data={notifications}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNotification}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={renderSeparator}
-        />
+        <>
+          <FlatList
+            data={notifications}
+            keyExtractor={(item) => item.id}
+            renderItem={renderNotification}
+            initialNumToRender={10}
+            maxToRenderPerBatch={8}
+            windowSize={7}
+            removeClippedSubviews
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={renderSeparator}
+          />
+          {undoNotification ? (
+            <View style={styles.undoBar}>
+              <Text style={styles.undoText} numberOfLines={1}>Notification deleted</Text>
+              <TouchableOpacity onPress={handleUndoDelete} style={styles.undoBtn}>
+                <Text style={styles.undoBtnText}>Undo</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </>
       )}
     </ScreenWrapper>
   );
@@ -366,6 +427,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  actorPhoto: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: Colors.divider,
+  },
+  actorFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+  actorInitial: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 15,
+    color: Colors.white,
+  },
   notifContent: {
     flex: 1,
     marginLeft: Spacing.sm,
@@ -403,5 +483,36 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyMed,
     fontSize: 14,
     color: Colors.accent,
+  },
+  undoBar: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    bottom: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+    borderRadius: BorderRadius.card,
+    backgroundColor: Colors.text,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  undoText: {
+    flex: 1,
+    fontFamily: Typography.bodyMed,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  undoBtn: {
+    borderRadius: BorderRadius.pill,
+    backgroundColor: Colors.white,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 7,
+  },
+  undoBtnText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
+    color: Colors.text,
   },
 });
