@@ -13,6 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { format } from 'date-fns';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../../constants/theme';
 import { supabase } from '../../lib/supabase';
@@ -287,108 +288,84 @@ export default function UserProfileScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         <Animated.View entering={FadeInDown.springify()} style={styles.profileCard}>
-          <View style={styles.coverArea}>
-            <View style={styles.coverCircleLarge} />
-            <View style={styles.coverCircleSmall} />
-          </View>
-
-          <View style={styles.profileHeader}>
-            <View style={styles.photoContainer}>
-              {profile.photoURL ? (
-                <Image source={{ uri: profile.photoURL }} style={styles.profilePhoto} resizeMode="cover" />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Text style={styles.photoInitial}>{firstInitial}</Text>
-                </View>
-              )}
-            </View>
-
-            <Text style={styles.displayName}>{profile.displayName || 'Anonymous'}</Text>
-            <View style={styles.profileMetaWrap}>
-              {profile.verificationStatus === 'verified' ? (
-                <View style={styles.verifiedPill}>
-                  <Ionicons name="shield-checkmark" size={13} color={Colors.success} />
-                  <Text style={styles.verifiedText}>Verified ID</Text>
-                </View>
-              ) : null}
-              {profile.location ? (
-                <View style={styles.profileMetaPill}>
-                  <Ionicons name="location-outline" size={13} color={Colors.textSecondary} />
-                  <Text style={styles.profileMetaText} numberOfLines={1}>{profile.location}</Text>
-                </View>
-              ) : null}
-              <View style={styles.profileMetaPill}>
-                <Ionicons name="person-outline" size={13} color={Colors.textSecondary} />
-                <Text style={styles.profileMetaText}>{profile.ageRange}</Text>
-              </View>
-              <View style={styles.profileMetaPill}>
-                <Ionicons name="calendar-outline" size={13} color={Colors.textSecondary} />
-                <Text style={styles.profileMetaText}>{memberSince}</Text>
-              </View>
-            </View>
-          </View>
-
-          {profile.bio ? (
-            <View style={styles.bioSection}>
-              <Text style={styles.bioText}>{profile.bio}</Text>
-            </View>
+          {profile.photoURL ? (
+            <Image source={{ uri: profile.photoURL }} style={styles.profileHeroImage} resizeMode="cover" />
           ) : (
-            <View style={styles.bioSection}>
-              <Text style={styles.bioMuted}>No bio added yet.</Text>
-            </View>
+            <LinearGradient colors={[Colors.primarySoft, Colors.primary, '#0D1628']} style={styles.profileHeroFallback}>
+              <View style={styles.heroInitialCircle}>
+                <Text style={styles.photoInitial}>{firstInitial}</Text>
+              </View>
+            </LinearGradient>
           )}
 
-          <View style={styles.quickStatsRow}>
-            <View style={styles.quickStat}>
-              <View style={styles.quickStatIcon}>
-                <Ionicons name="star" size={15} color={Colors.accent} />
+          <LinearGradient
+            colors={['rgba(21, 34, 56, 0.04)', 'rgba(21, 34, 56, 0.56)', 'rgba(21, 34, 56, 0.94)']}
+            locations={[0.12, 0.5, 1]}
+            style={styles.profileHeroOverlay}
+          />
+
+          <View style={styles.profileTopBar}>
+            {profile.location ? (
+              <View style={styles.profileGlassPill}>
+                <Ionicons name="location-outline" size={13} color={Colors.white} />
+                <Text style={styles.profileGlassText} numberOfLines={1}>{profile.location}</Text>
               </View>
-              <Text style={styles.quickStatValue}>
-                {profile.ratingCount > 0 ? profile.rating.toFixed(1) : 'New'}
-              </Text>
-              <Text style={styles.quickStatLabel}>Rating</Text>
-            </View>
-            <View style={styles.quickStat}>
-              <View style={styles.quickStatIcon}>
-                <Ionicons name="sparkles-outline" size={15} color={Colors.accent} />
-              </View>
-              <Text style={styles.quickStatValue}>{profile.interests.length}</Text>
-              <Text style={styles.quickStatLabel}>Interests</Text>
-            </View>
-            <View style={styles.quickStat}>
-              <View style={styles.quickStatIcon}>
-                <Ionicons name="people-outline" size={15} color={Colors.accent} />
-              </View>
-              <Text style={styles.quickStatValue}>{hostedCount + joinedCount}</Text>
-              <Text style={styles.quickStatLabel}>Activities</Text>
+            ) : (
+              <View />
+            )}
+            <View style={styles.profileLightPill}>
+              <Ionicons name="calendar-outline" size={13} color={Colors.primary} />
+              <Text style={styles.profileLightPillText}>{memberSince}</Text>
             </View>
           </View>
 
-          <View style={styles.interestsSection}>
-            <Text style={styles.sectionLabel}>Interests</Text>
+          <View style={styles.profileHeroContent}>
+            <Text style={styles.displayName} numberOfLines={2}>{profile.displayName || 'Anonymous'}</Text>
+            <Text style={styles.profileHandle} numberOfLines={1}>
+              @{(profile.displayName || 'joinup').trim().toLowerCase().replace(/\s+/g, '_')}
+            </Text>
+
+            {profile.bio ? (
+              <Text style={styles.bioText} numberOfLines={3}>{profile.bio}</Text>
+            ) : (
+              <Text style={styles.bioMuted} numberOfLines={2}>Ready to discover activities on JoinUp.</Text>
+            )}
+
+            <View style={styles.quickStatsRow}>
+              <View style={styles.quickStat}>
+                <Text style={styles.quickStatValue}>
+                  {profile.ratingCount > 0 ? profile.rating.toFixed(1) : 'New'}
+                </Text>
+                <Text style={styles.quickStatLabel}>Rating</Text>
+              </View>
+              <View style={styles.quickStat}>
+                <Text style={styles.quickStatValue}>{hostedCount}</Text>
+                <Text style={styles.quickStatLabel}>Hosted</Text>
+              </View>
+              <View style={styles.quickStat}>
+                <Text style={styles.quickStatValue}>{joinedCount}</Text>
+                <Text style={styles.quickStatLabel}>Joined</Text>
+              </View>
+            </View>
+
             {profile.interests.length > 0 ? (
               <View style={styles.interestsList}>
-                {profile.interests.map((interest) => (
+                {profile.interests.slice(0, 5).map((interest) => (
                   <View key={interest} style={styles.interestBadge}>
                     <Text style={styles.interestBadgeText}>{interest}</Text>
                   </View>
                 ))}
+                {profile.interests.length > 5 ? (
+                  <Text style={styles.moreInterestText}>+{profile.interests.length - 5}</Text>
+                ) : null}
               </View>
             ) : (
-              <Text style={styles.emptyInlineText}>No interests listed yet.</Text>
+              <View style={styles.interestsList}>
+                <View style={styles.interestBadge}>
+                  <Text style={styles.interestBadgeText}>New member</Text>
+                </View>
+              </View>
             )}
-          </View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{hostedCount}</Text>
-              <Text style={styles.statLabel}>Hosted</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{joinedCount}</Text>
-              <Text style={styles.statLabel}>Joined</Text>
-            </View>
           </View>
         </Animated.View>
 
@@ -640,11 +617,89 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   profileCard: {
-    backgroundColor: Colors.white,
+    minHeight: 560,
+    backgroundColor: Colors.primary,
     marginHorizontal: Spacing.lg,
-    borderRadius: 14,
+    borderRadius: BorderRadius.sheet,
     overflow: 'hidden',
     ...Shadows.card,
+  },
+  profileHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  profileHeroFallback: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileHeroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroInitialCircle: {
+    width: 132,
+    height: 132,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 4,
+    borderColor: 'rgba(255, 255, 255, 0.34)',
+  },
+  profileTopBar: {
+    position: 'absolute',
+    top: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.sm,
+  },
+  profileGlassPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: '62%',
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(21, 34, 56, 0.48)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  profileGlassText: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
+  },
+  profileLightPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 8,
+    backgroundColor: Colors.white,
+  },
+  profileLightPillText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.primary,
+  },
+  profileHeroContent: {
+    marginTop: 'auto',
+    marginHorizontal: Spacing.md,
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.sheet,
+    padding: Spacing.lg,
+    backgroundColor: 'rgba(21, 34, 56, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
   },
   coverArea: {
     height: 116,
@@ -699,15 +754,21 @@ const styles = StyleSheet.create({
   },
   photoInitial: {
     fontFamily: Typography.display,
-    fontSize: 38,
+    fontSize: 48,
     color: Colors.white,
   },
   displayName: {
     fontFamily: Typography.display,
-    fontSize: 28,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-    textAlign: 'center',
+    fontSize: 42,
+    lineHeight: 46,
+    color: Colors.white,
+    marginBottom: 2,
+  },
+  profileHandle: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.68)',
+    marginBottom: Spacing.md,
   },
   profileMetaWrap: {
     flexDirection: 'row',
@@ -755,31 +816,25 @@ const styles = StyleSheet.create({
   },
   bioText: {
     fontFamily: Typography.body,
-    fontSize: 14,
-    color: Colors.text,
-    lineHeight: 20,
-    textAlign: 'center',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.88)',
+    lineHeight: 21,
+    marginBottom: Spacing.lg,
   },
   bioMuted: {
     fontFamily: Typography.body,
-    fontSize: 14,
-    color: Colors.slate,
-    lineHeight: 20,
-    textAlign: 'center',
+    fontSize: 15,
+    color: 'rgba(255, 255, 255, 0.68)',
+    lineHeight: 21,
+    marginBottom: Spacing.lg,
   },
   quickStatsRow: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-    gap: Spacing.sm,
+    gap: Spacing.lg,
+    marginBottom: Spacing.lg,
   },
   quickStat: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: Colors.cream,
-    borderRadius: 12,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
+    minWidth: 68,
   },
   quickStatIcon: {
     width: 28,
@@ -791,14 +846,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   quickStatValue: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 14,
-    color: Colors.text,
+    fontFamily: Typography.display,
+    fontSize: 22,
+    color: Colors.white,
   },
   quickStatLabel: {
-    fontFamily: Typography.body,
-    fontSize: 10,
-    color: Colors.slate,
+    fontFamily: Typography.bodyMed,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.58)',
+    marginTop: 2,
   },
   interestsSection: {
     borderTopWidth: 1,
@@ -824,17 +880,24 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   interestBadge: {
-    backgroundColor: Colors.accent + '12',
+    backgroundColor: 'rgba(255, 107, 53, 0.2)',
     borderRadius: BorderRadius.pill,
     borderWidth: 1,
-    borderColor: Colors.accent + '18',
+    borderColor: 'rgba(255, 107, 53, 0.48)',
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
   interestBadgeText: {
-    fontFamily: Typography.body,
+    fontFamily: Typography.bodyMed,
     fontSize: 12,
-    color: Colors.accent,
+    color: Colors.white,
+  },
+  moreInterestText: {
+    alignSelf: 'center',
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.66)',
+    paddingHorizontal: Spacing.xs,
   },
   statsRow: {
     flexDirection: 'row',

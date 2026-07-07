@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,7 +33,7 @@ export default function ActivityDetailScreen() {
   const id = rawId ? rawId.toString().trim() : '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const galleryWidth = Dimensions.get('window').width - Spacing.md * 2;
+  const galleryWidth = Dimensions.get('window').width - Spacing.lg * 2;
   const {
     activities,
     isLoading,
@@ -48,6 +49,10 @@ export default function ActivityDetailScreen() {
 
   const [showJoinSheet, setShowJoinSheet] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
+  const galleryScrollRef = useRef<ScrollView>(null);
   const [participantProfiles, setParticipantProfiles] = useState<Record<string, { displayName: string; photoUrl: string }>>({});
 
   const activity = useMemo(
@@ -152,6 +157,17 @@ export default function ActivityDetailScreen() {
     ? format(new Date(activity.dateTime), 'EEEE, MMMM d, h:mm a')
     : '';
   const hostInitial = (activity.hostName || 'H').trim().charAt(0).toUpperCase();
+  const galleryImages = (activity.images ?? []).length > 0
+    ? activity.images ?? []
+    : activity.coverImage
+      ? [activity.coverImage]
+      : [];
+  const selectedViewerImage = galleryImages[viewerIndex] ?? galleryImages[0] ?? '';
+
+  const openPhotoViewer = (index: number) => {
+    setViewerIndex(index);
+    setShowPhotoViewer(true);
+  };
 
   const handleJoin = async () => {
     if (!user) return;
@@ -189,21 +205,6 @@ export default function ActivityDetailScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <NavBar
-        title={activity.title}
-        showBack
-        rightAction={
-          isHost ? (
-            <TouchableOpacity
-              onPress={() => router.push(`/activity/${id}/manage` as never)}
-              style={styles.manageBtn}
-            >
-              <Ionicons name="settings-outline" size={22} color={Colors.text} />
-            </TouchableOpacity>
-          ) : null
-        }
-      />
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -211,61 +212,121 @@ export default function ActivityDetailScreen() {
         {/* Images Gallery */}
         <Animated.View entering={FadeInDown.delay(100).springify()}>
           <View style={styles.imageGallery}>
-            {(activity.images ?? []).length > 0 ? (
+            {galleryImages.length > 0 ? (
               <ScrollView
+                ref={galleryScrollRef}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
+                onMomentumScrollEnd={(event) => {
+                  const nextIndex = Math.round(event.nativeEvent.contentOffset.x / galleryWidth);
+                  setGalleryIndex(nextIndex);
+                }}
                 style={styles.imageCarousel}
               >
-                {activity.images!.map((imageUrl, index) => (
-                  <Image
+                {galleryImages.map((imageUrl, index) => (
+                  <TouchableOpacity
                     key={index}
-                    source={{ uri: imageUrl }}
                     style={[styles.galleryImage, { width: galleryWidth }]}
-                    resizeMode="cover"
-                  />
+                    activeOpacity={0.94}
+                    onPress={() => openPhotoViewer(index)}
+                  >
+                    <Image
+                      source={{ uri: imageUrl }}
+                      style={styles.galleryImageContent}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
-            ) : activity.coverImage ? (
-              <Image
-                source={{ uri: activity.coverImage }}
-                style={[styles.galleryImage, { width: galleryWidth }]}
-                resizeMode="cover"
-              />
             ) : (
               <View style={styles.coverPlaceholder}>
                 <Ionicons name="image-outline" size={48} color={Colors.slate} />
               </View>
             )}
-            {(activity.images ?? []).length > 1 && (
+            {galleryImages.length > 1 && (
               <View style={styles.imageCounter}>
-                <Text style={styles.imageCountText}>{(activity.images ?? []).length} photos</Text>
+                <Text style={styles.imageCountText}>{galleryIndex + 1} / {galleryImages.length}</Text>
               </View>
             )}
-          </View>
-        </Animated.View>
+            {galleryImages.length > 1 && (
+              <View style={styles.thumbnailRail}>
+                {galleryImages.slice(0, 4).map((imageUrl, index) => {
+                  const hiddenCount = galleryImages.length - 4;
+                  const showMore = index === 3 && hiddenCount > 0;
 
-        {/* Category and status */}
-        <Animated.View entering={FadeInDown.delay(150).springify()} style={styles.chipRow}>
-          <View style={[styles.categoryChip, { backgroundColor: chipColor + '18', borderColor: chipColor }]}>
-            <Text style={[styles.categoryText, { color: chipColor }]}>{activity.category}</Text>
-          </View>
-          {isFull && (
-            <View style={styles.fullBadge}>
-              <Text style={styles.fullBadgeText}>FULL</Text>
+                  return (
+                    <TouchableOpacity
+                      key={`${imageUrl}-${index}`}
+                      style={[
+                        styles.thumbnailButton,
+                        galleryIndex === index && styles.thumbnailButtonActive,
+                      ]}
+                      activeOpacity={0.84}
+                      onPress={() => {
+                        galleryScrollRef.current?.scrollTo({ x: galleryWidth * index, animated: true });
+                        setGalleryIndex(index);
+                        openPhotoViewer(index);
+                      }}
+                    >
+                      <Image source={{ uri: imageUrl }} style={styles.thumbnailImage} resizeMode="cover" />
+                      {showMore ? (
+                        <View style={styles.thumbnailMoreOverlay}>
+                          <Text style={styles.thumbnailMoreText}>+{hiddenCount}</Text>
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+            <View style={styles.galleryControls}>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                style={styles.galleryControlBtn}
+                activeOpacity={0.84}
+              >
+                <Ionicons name="close" size={20} color={Colors.white} />
+              </TouchableOpacity>
+              {isHost ? (
+                <TouchableOpacity
+                  onPress={() => router.push(`/activity/${id}/manage` as never)}
+                  style={styles.galleryControlBtn}
+                  activeOpacity={0.84}
+                >
+                  <Ionicons name="settings-outline" size={20} color={Colors.white} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.galleryControlSpacer} />
+              )}
             </View>
-          )}
+          </View>
         </Animated.View>
 
         {/* Title */}
-        <Animated.View entering={FadeInDown.delay(200).springify()}>
+        <Animated.View entering={FadeInDown.delay(150).springify()} style={styles.titleSection}>
           <Text style={styles.title}>{activity.title}</Text>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Ionicons name="star" size={15} color={Colors.text} />
+              <Text style={styles.summaryText}>
+                {activity.reactions.like + activity.reactions.heart + activity.reactions.fire > 0
+                  ? `${activity.reactions.like + activity.reactions.heart + activity.reactions.fire} reactions`
+                  : 'New activity'}
+              </Text>
+            </View>
+            <Text style={styles.summaryDot}>-</Text>
+            <Text style={styles.summaryText}>{joined}/{activity.maxSlots} going</Text>
+          </View>
         </Animated.View>
 
         {/* Host info */}
-        <Animated.View entering={FadeInDown.delay(250).springify()} style={styles.hostRow}>
+        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.hostCard}>
+          <View>
+            <Text style={styles.hostCardTitle}>{activity.category} activity</Text>
+            <Text style={styles.hostText}>Hosted by {activity.hostName || 'Host'}</Text>
+          </View>
           <View style={styles.hostAvatar}>
             {activity.hostPhoto ? (
               <Image source={{ uri: activity.hostPhoto }} style={styles.hostAvatarImage} resizeMode="cover" />
@@ -273,13 +334,10 @@ export default function ActivityDetailScreen() {
               <Text style={styles.hostAvatarInitial}>{hostInitial}</Text>
             )}
           </View>
-          <Text style={styles.hostText}>
-            Hosted by <Text style={styles.hostName}>{activity.hostName}</Text>
-          </Text>
         </Animated.View>
 
         {/* Date and location */}
-        <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.infoSection}>
+        <Animated.View entering={FadeInDown.delay(250).springify()} style={styles.infoSection}>
           <View style={styles.infoRow}>
             <View style={styles.infoIcon}>
               <Ionicons name="calendar-outline" size={20} color={Colors.accent} />
@@ -297,6 +355,26 @@ export default function ActivityDetailScreen() {
               <Text style={styles.infoLabel}>Location</Text>
               <Text style={styles.infoValue}>{activity.location.name}</Text>
             </View>
+          </View>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.amenitiesSection}>
+          <Text style={styles.sectionTitle}>Activity info</Text>
+          <View style={styles.amenitiesList}>
+            <View style={[styles.amenityPill, { backgroundColor: chipColor + '14' }]}>
+              <Text style={[styles.amenityText, { color: chipColor }]}>{activity.category}</Text>
+            </View>
+            <View style={styles.amenityPill}>
+              <Text style={styles.amenityText}>{activity.requiresApproval ? 'Approval required' : 'Instant join'}</Text>
+            </View>
+            <View style={styles.amenityPill}>
+              <Text style={styles.amenityText}>{activity.currentSlots} spots left</Text>
+            </View>
+            {isFull ? (
+              <View style={styles.fullBadge}>
+                <Text style={styles.fullBadgeText}>Full</Text>
+              </View>
+            ) : null}
           </View>
         </Animated.View>
 
@@ -319,7 +397,9 @@ export default function ActivityDetailScreen() {
         </Animated.View>
 
         {/* Reactions */}
-        <Animated.View entering={FadeInDown.delay(450).springify()} style={styles.reactionsRow}>
+        <Animated.View entering={FadeInDown.delay(450).springify()} style={styles.reactionsSection}>
+          <Text style={styles.sectionTitle}>Reactions</Text>
+          <View style={styles.reactionsRow}>
           <TouchableOpacity style={styles.reactionBtn}>
             <Ionicons name="flame-outline" size={15} color={Colors.accent} />
             <Text style={styles.reactionCount}>{activity.reactions.fire}</Text>
@@ -332,6 +412,7 @@ export default function ActivityDetailScreen() {
             <Ionicons name="thumbs-up-outline" size={15} color={Colors.success} />
             <Text style={styles.reactionCount}>{activity.reactions.like}</Text>
           </TouchableOpacity>
+          </View>
         </Animated.View>
       </ScrollView>
 
@@ -411,6 +492,49 @@ export default function ActivityDetailScreen() {
           />
         </View>
       </BottomSheet>
+
+      <Modal
+        visible={showPhotoViewer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPhotoViewer(false)}
+      >
+        <View style={styles.photoViewer}>
+          <TouchableOpacity
+            style={[styles.photoViewerClose, { top: insets.top + Spacing.md }]}
+            onPress={() => setShowPhotoViewer(false)}
+            activeOpacity={0.84}
+          >
+            <Ionicons name="close" size={22} color={Colors.white} />
+          </TouchableOpacity>
+          {galleryImages.length > 1 ? (
+            <View style={[styles.photoViewerCounter, { top: insets.top + Spacing.md }]}>
+              <Text style={styles.photoViewerCounterText}>{viewerIndex + 1} / {galleryImages.length}</Text>
+            </View>
+          ) : null}
+          {selectedViewerImage ? (
+            <Image source={{ uri: selectedViewerImage }} style={styles.photoViewerImage} resizeMode="contain" />
+          ) : null}
+          {galleryImages.length > 1 ? (
+            <View style={[styles.photoViewerNav, { bottom: insets.bottom + Spacing.xl }]}>
+              <TouchableOpacity
+                style={styles.photoViewerNavBtn}
+                onPress={() => setViewerIndex((current) => (current === 0 ? galleryImages.length - 1 : current - 1))}
+                activeOpacity={0.84}
+              >
+                <Ionicons name="chevron-back" size={22} color={Colors.white} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.photoViewerNavBtn}
+                onPress={() => setViewerIndex((current) => (current + 1) % galleryImages.length)}
+                activeOpacity={0.84}
+              >
+                <Ionicons name="chevron-forward" size={22} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -431,18 +555,16 @@ const styles = StyleSheet.create({
     color: Colors.slate,
   },
   content: {
-    paddingBottom: 120,
+    paddingBottom: 132,
     paddingTop: Spacing.sm,
   },
   imageGallery: {
-    height: 250,
+    height: 330,
     backgroundColor: Colors.primary + '12',
     marginHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.card,
+    borderRadius: BorderRadius.sheet,
     overflow: 'hidden',
     position: 'relative',
-    borderWidth: 1,
-    borderColor: Colors.divider,
     ...Shadows.soft,
   },
   imageCarousel: {
@@ -452,24 +574,91 @@ const styles = StyleSheet.create({
   galleryImage: {
     height: '100%',
   },
+  galleryImageContent: {
+    width: '100%',
+    height: '100%',
+  },
   coverPlaceholder: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.mutedSurface,
   },
   imageCounter: {
     position: 'absolute',
     bottom: Spacing.md,
     right: Spacing.md,
-    backgroundColor: Colors.text,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 4,
+    backgroundColor: 'rgba(21, 34, 56, 0.62)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: BorderRadius.pill,
   },
   imageCountText: {
-    fontFamily: Typography.bodyMed,
+    fontFamily: Typography.bodyBold,
     fontSize: 12,
     color: Colors.white,
+  },
+  thumbnailRail: {
+    position: 'absolute',
+    top: 74,
+    right: Spacing.sm,
+    width: 42,
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.28)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.38)',
+  },
+  thumbnailButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.72)',
+    backgroundColor: Colors.white,
+  },
+  thumbnailButtonActive: {
+    borderColor: Colors.accent,
+  },
+  thumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  thumbnailMoreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(21, 34, 56, 0.58)',
+  },
+  thumbnailMoreText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 10,
+    color: Colors.white,
+  },
+  galleryControls: {
+    position: 'absolute',
+    top: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  galleryControlBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(21, 34, 56, 0.46)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  galleryControlSpacer: {
+    width: 40,
+    height: 40,
   },
   chipRow: {
     flexDirection: 'row',
@@ -489,10 +678,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   fullBadge: {
-    backgroundColor: Colors.danger + '15',
+    backgroundColor: Colors.danger + '12',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: BorderRadius.pill,
+    borderWidth: 1,
+    borderColor: Colors.danger + '22',
   },
   fullBadgeText: {
     fontFamily: Typography.bodyBold,
@@ -501,11 +692,38 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: Typography.display,
-    fontSize: 26,
+    fontSize: 25,
     color: Colors.text,
+    lineHeight: 31,
+  },
+  titleSection: {
     marginHorizontal: Spacing.lg,
-    marginTop: Spacing.md,
-    lineHeight: 32,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: Spacing.sm,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  summaryText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
+    color: Colors.text,
+  },
+  summaryDot: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 14,
+    color: Colors.slate,
   },
   hostRow: {
     flexDirection: 'row',
@@ -515,9 +733,9 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   hostAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: Colors.peach,
     alignItems: 'center',
     justifyContent: 'center',
@@ -529,33 +747,42 @@ const styles = StyleSheet.create({
   },
   hostAvatarInitial: {
     fontFamily: Typography.bodyBold,
-    fontSize: 12,
+    fontSize: 18,
     color: Colors.white,
   },
   hostText: {
     fontFamily: Typography.body,
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.slate,
+    marginTop: 3,
   },
-  hostName: {
+  hostCard: {
+    marginHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.md,
+  },
+  hostCardTitle: {
     fontFamily: Typography.bodyBold,
+    fontSize: 16,
     color: Colors.text,
   },
   infoSection: {
     marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-    gap: Spacing.md,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.card,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    padding: Spacing.md,
-    ...Shadows.hairline,
+    gap: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+    paddingVertical: Spacing.sm,
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.md,
+    paddingVertical: Spacing.md,
   },
   infoIcon: {
     width: 40,
@@ -584,14 +811,33 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     flexShrink: 1,
   },
+  amenitiesSection: {
+    marginHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  amenitiesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  amenityPill: {
+    backgroundColor: Colors.mutedSurface,
+    borderRadius: BorderRadius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  amenityText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
   descSection: {
     marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.card,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    padding: Spacing.md,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
   },
   sectionTitle: {
     fontFamily: Typography.bodyBold,
@@ -607,12 +853,9 @@ const styles = StyleSheet.create({
   },
   participantsSection: {
     marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.card,
-    borderWidth: 1,
-    borderColor: Colors.divider,
-    padding: Spacing.md,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
   },
   participantsRow: {
     flexDirection: 'row',
@@ -625,10 +868,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.slate,
   },
+  reactionsSection: {
+    marginHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+  },
   reactionsRow: {
     flexDirection: 'row',
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
     gap: Spacing.sm,
   },
   reactionBtn: {
@@ -687,6 +932,54 @@ const styles = StyleSheet.create({
   manageBtn: {
     width: 44,
     height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoViewer: {
+    flex: 1,
+    backgroundColor: 'rgba(4, 8, 15, 0.96)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoViewerImage: {
+    width: '100%',
+    height: '78%',
+  },
+  photoViewerClose: {
+    position: 'absolute',
+    left: Spacing.lg,
+    zIndex: 2,
+    width: 44,
+    height: 44,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoViewerCounter: {
+    position: 'absolute',
+    right: Spacing.lg,
+    zIndex: 2,
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+  },
+  photoViewerCounterText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
+  },
+  photoViewerNav: {
+    position: 'absolute',
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  photoViewerNavBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     alignItems: 'center',
     justifyContent: 'center',
   },

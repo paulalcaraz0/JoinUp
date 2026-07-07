@@ -9,15 +9,18 @@ function SkeletonBlock({ style }: { style?: object }) {
 export function ActivityCardSkeleton() {
   return (
     <View style={[styles.activityCard, Shadows.card]}>
-      <SkeletonBlock style={styles.activityImage} />
-      <View style={styles.rowBetween}>
+      <View style={styles.skeletonTopRow}>
         <SkeletonBlock style={styles.chip} />
         <SkeletonBlock style={styles.smallChip} />
       </View>
-      <SkeletonBlock style={styles.title} />
-      <SkeletonBlock style={styles.shortLine} />
-      <SkeletonBlock style={styles.line} />
-      <SkeletonBlock style={styles.button} />
+      <View style={styles.skeletonBottom}>
+        <SkeletonBlock style={styles.title} />
+        <SkeletonBlock style={styles.shortLine} />
+        <View style={styles.rowBetween}>
+          <SkeletonBlock style={styles.line} />
+          <SkeletonBlock style={styles.button} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -53,56 +56,64 @@ const styles = StyleSheet.create({
     opacity: 0.62,
   },
   activityCard: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.card,
-    padding: Spacing.ms,
-    marginBottom: Spacing.md,
+    height: 420,
+    backgroundColor: Colors.primary + '14',
+    borderRadius: 28,
+    marginBottom: Spacing.lg,
     marginHorizontal: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.divider,
+    overflow: 'hidden',
   },
-  activityImage: {
-    height: 164,
-    borderRadius: BorderRadius.input,
-    marginBottom: Spacing.ms,
+  skeletonTopRow: {
+    position: 'absolute',
+    top: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  skeletonBottom: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    bottom: Spacing.lg,
   },
   rowBetween: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
+    gap: Spacing.md,
   },
   chip: {
     width: 86,
-    height: 24,
+    height: 30,
     borderRadius: BorderRadius.pill,
   },
   smallChip: {
     width: 58,
-    height: 24,
+    height: 30,
     borderRadius: BorderRadius.pill,
   },
   title: {
-    width: '78%',
-    height: 22,
+    width: '82%',
+    height: 30,
     borderRadius: BorderRadius.sm,
     marginBottom: Spacing.sm,
   },
   shortLine: {
-    width: '52%',
-    height: 14,
+    width: '64%',
+    height: 16,
     borderRadius: BorderRadius.sm,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   line: {
-    width: '100%',
-    height: 10,
-    borderRadius: BorderRadius.sm,
-    marginTop: Spacing.sm,
+    flex: 1,
+    height: 18,
+    borderRadius: BorderRadius.pill,
   },
   button: {
-    height: 42,
-    borderRadius: BorderRadius.button,
-    marginTop: Spacing.md,
+    width: 108,
+    height: 52,
+    borderRadius: BorderRadius.pill,
   },
   chatRow: {
     flexDirection: 'row',

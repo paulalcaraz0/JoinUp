@@ -17,7 +17,6 @@ import { useActivities } from '../../hooks/useActivities';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ChatRowSkeleton } from '../../components/ui/LoadingSkeleton';
 import { useAuthStore } from '../../store/authStore';
-import { getMockChatPreview } from '../../lib/mockChats';
 import { supabase } from '../../lib/supabase';
 import { clearChatActivityUnread, loadUnreadChatActivityIds, saveUnreadChatActivityIds } from '../../hooks/useChat';
 import type { Activity, JoinRequestStatus, Message } from '../../types';
@@ -83,7 +82,6 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
   recentMeta,
 }: ChatActivityRowProps) {
   const chipColor = CategoryColors[activity.category] ?? Colors.accent;
-  const preview = getMockChatPreview(activity.id);
   const isHost = activity.hostId === currentUserId;
   const status = getJoinStatus(activity.id);
   const effectiveStatus: JoinRequestStatus | null =
@@ -91,9 +89,7 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
   const meta = statusMeta(effectiveStatus, isHost);
   const previewText = recentMeta?.previewText
     ? `${recentMeta.senderName}: ${recentMeta.previewText}`
-    : preview
-      ? `${preview.senderName}: ${preview.text}`
-      : `${activity.participants.length} participants`;
+    : `${activity.participants.length} participants`;
   const timeText = recentMeta?.lastMessageAt
     ? new Date(recentMeta.lastMessageAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : '';

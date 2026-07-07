@@ -2,9 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, Image } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { format } from 'date-fns';
 import { Colors, Typography, BorderRadius, Spacing, Shadows, CategoryColors } from '../../constants/theme';
-import { SlotProgressBar } from './SlotProgressBar';
 import type { Activity } from '../../types';
 
 interface ActivityCardProps {
@@ -35,6 +35,7 @@ function ActivityCardComponent({
   const dateStr = activity.dateTime ? format(new Date(activity.dateTime), 'EEE, h:mm a') : '';
   const joined = activity.maxSlots - activity.currentSlots;
   const hostInitial = (activity.hostName || 'H').trim().charAt(0).toUpperCase();
+  const actionLabel = joinLabel ?? (isLeaving ? 'Joining...' : isFull ? 'Full' : 'Join');
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
@@ -44,89 +45,99 @@ function ActivityCardComponent({
         activeOpacity={0.92}
         disabled={isLeaving}
       >
-        <View style={styles.mediaFrame}>
-          {activity.coverImage ? (
-            <Image source={{ uri: activity.coverImage }} style={styles.coverPhoto} resizeMode="cover" />
-          ) : (
-            <View style={styles.coverPlaceholder}>
-              <Ionicons name="calendar-outline" size={32} color={Colors.slate} />
-            </View>
-          )}
-          <View style={styles.mediaOverlay} />
-          <View style={styles.dateBadge}>
-            <Text style={styles.dateBadgeText}>{dateStr || 'Soon'}</Text>
-          </View>
-        </View>
+        {activity.coverImage ? (
+          <Image source={{ uri: activity.coverImage }} style={styles.coverPhoto} resizeMode="cover" />
+        ) : (
+          <LinearGradient
+            colors={[Colors.primarySoft, Colors.primary, '#0E1726']}
+            style={styles.coverPhoto}
+          >
+            <Ionicons name="calendar-outline" size={42} color={Colors.white + 'B8'} />
+          </LinearGradient>
+        )}
 
-        <View style={styles.topRow}>
-          <View style={[styles.categoryChip, { backgroundColor: chipColor + '16', borderColor: chipColor }]}>
+        <LinearGradient
+          colors={[
+            'rgba(21,34,56,0.06)',
+            'rgba(21,34,56,0.18)',
+            'rgba(21,34,56,0.76)',
+            'rgba(21,34,56,0.94)',
+          ]}
+          locations={[0, 0.42, 0.72, 1]}
+          style={styles.cardOverlay}
+        />
+
+        <View style={styles.topOverlayRow}>
+          <View style={[styles.categoryChip, { backgroundColor: Colors.white + 'E8', borderColor: chipColor }]}>
             <Text style={[styles.categoryText, { color: chipColor }]}>{activity.category}</Text>
           </View>
-          <View style={[styles.slotBadge, { backgroundColor: isFull ? Colors.danger + '12' : Colors.success + '12' }]}>
-            <Text style={[styles.slotBadgeText, { color: isFull ? Colors.danger : Colors.success }]}>
+          <View style={[styles.slotBadge, { backgroundColor: isFull ? Colors.danger : Colors.white + 'E8' }]}>
+            <Text style={[styles.slotBadgeText, { color: isFull ? Colors.white : Colors.primary }]}>
               {isFull ? 'Full' : `${slotsLeft} left`}
             </Text>
           </View>
         </View>
 
-        <Text style={styles.title} numberOfLines={2}>
-          {activity.title}
-        </Text>
+        <View style={styles.contentOverlay}>
+          <Text style={styles.title} numberOfLines={2}>
+            {activity.title}
+          </Text>
 
-        <View style={styles.hostRow}>
-          {activity.hostPhoto ? (
-            <Image source={{ uri: activity.hostPhoto }} style={styles.hostPhoto} resizeMode="cover" />
-          ) : (
-            <View style={styles.hostPhotoFallback}>
-              <Text style={styles.hostInitial}>{hostInitial}</Text>
+          <View style={styles.hostRow}>
+            {activity.hostPhoto ? (
+              <Image source={{ uri: activity.hostPhoto }} style={styles.hostPhoto} resizeMode="cover" />
+            ) : (
+              <View style={styles.hostPhotoFallback}>
+                <Text style={styles.hostInitial}>{hostInitial}</Text>
+              </View>
+            )}
+            <View style={styles.hostTextWrap}>
+              <Text style={styles.hostName} numberOfLines={1}>
+                Hosted by {activity.hostName || 'JoinUp host'}
+              </Text>
             </View>
-          )}
-          <View style={styles.hostTextWrap}>
-            <Text style={styles.hostLabel}>Hosted by</Text>
-            <Text style={styles.hostName} numberOfLines={1}>
-              {activity.hostName || 'JoinUp host'}
+            {activity.requiresApproval ? (
+              <View style={styles.approvalPill}>
+                <Ionicons name="shield-checkmark-outline" size={12} color={Colors.white} />
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.infoRow}>
+            <Ionicons name="location-outline" size={14} color={Colors.white + 'D9'} />
+            <Text style={styles.infoText} numberOfLines={1}>
+              {activity.location.name || 'Location TBD'}
             </Text>
           </View>
-          {activity.requiresApproval ? (
-            <View style={styles.approvalPill}>
-              <Ionicons name="shield-checkmark-outline" size={12} color={Colors.success} />
-              <Text style={styles.approvalText}>Approval</Text>
+
+          <View style={styles.bottomRow}>
+            <View style={styles.metricsRow}>
+              <View style={styles.metricItem}>
+                <Ionicons name="people-outline" size={15} color={Colors.white} />
+                <Text style={styles.metricText}>{joined}/{activity.maxSlots}</Text>
+              </View>
+              <View style={styles.metricItem}>
+                <Ionicons name="time-outline" size={15} color={Colors.white} />
+                <Text style={styles.metricText}>{dateStr || 'Soon'}</Text>
+              </View>
             </View>
-          ) : null}
-        </View>
 
-        <View style={styles.infoRow}>
-          <Ionicons name="location-outline" size={14} color={Colors.slate} />
-          <Text style={styles.infoText} numberOfLines={2}>
-            {activity.location.name || 'Location TBD'}
-          </Text>
-        </View>
-
-        <SlotProgressBar current={joined} max={activity.maxSlots} />
-        <View style={styles.trustMetaRow}>
-          <Text style={styles.progressText}>{joined}/{activity.maxSlots} joined</Text>
-          <View style={styles.participantPill}>
-            <Ionicons name="people-outline" size={12} color={Colors.slate} />
-            <Text style={styles.participantText}>
-              {activity.participants.length} participant{activity.participants.length === 1 ? '' : 's'}
-            </Text>
+            <TouchableOpacity
+              style={[styles.joinBtn, isActionDisabled && styles.joinBtnDisabled]}
+              onPress={(event) => {
+                event.stopPropagation?.();
+                onJoin();
+              }}
+              disabled={isActionDisabled}
+              activeOpacity={0.82}
+            >
+              <Text style={[styles.joinBtnText, isActionDisabled && styles.joinBtnTextDisabled]}>
+                {actionLabel}
+              </Text>
+              {!isActionDisabled ? <Ionicons name="add" size={20} color={Colors.primary} /> : null}
+            </TouchableOpacity>
           </View>
         </View>
-
-        <TouchableOpacity
-          style={[styles.joinBtn, isActionDisabled && styles.joinBtnDisabled]}
-          onPress={(event) => {
-            event.stopPropagation?.();
-            onJoin();
-          }}
-          disabled={isActionDisabled}
-          activeOpacity={0.82}
-        >
-          <Text style={styles.joinBtnText}>
-            {joinLabel ?? (isLeaving ? 'Joining...' : isFull ? 'Full' : 'Join')}
-          </Text>
-          {!isActionDisabled ? <Ionicons name="arrow-forward" size={15} color={Colors.white} /> : null}
-        </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -136,203 +147,170 @@ export const ActivityCard = React.memo(ActivityCardComponent);
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.card,
-    padding: Spacing.ms,
-    marginBottom: Spacing.md,
+    height: 420,
+    backgroundColor: Colors.primary,
+    borderRadius: 28,
+    marginBottom: Spacing.lg,
     marginHorizontal: Spacing.lg,
-    borderWidth: 1,
-    borderColor: Colors.divider,
     overflow: 'hidden',
   },
   cardLeaving: {
     transform: [{ translateX: 12 }],
   },
-  mediaFrame: {
-    width: '100%',
-    height: 164,
-    borderRadius: BorderRadius.input,
-    marginBottom: Spacing.ms,
-    backgroundColor: Colors.mutedSurface,
-    overflow: 'hidden',
-    position: 'relative',
-  },
   coverPhoto: {
     width: '100%',
     height: '100%',
-  },
-  coverPlaceholder: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mediaOverlay: {
+  cardOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(21,34,56,0.06)',
   },
-  dateBadge: {
+  topOverlayRow: {
     position: 'absolute',
-    left: Spacing.sm,
-    bottom: Spacing.sm,
-    borderRadius: BorderRadius.pill,
-    backgroundColor: Colors.white,
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: Colors.white + '99',
-  },
-  dateBadgeText: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 11,
-    color: Colors.primary,
-  },
-  topRow: {
+    top: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
   },
   categoryChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
     borderRadius: BorderRadius.pill,
     borderWidth: 1,
   },
   categoryText: {
-    fontFamily: Typography.bodyMed,
+    fontFamily: Typography.bodyBold,
     fontSize: 12,
   },
   slotBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: BorderRadius.pill,
   },
   slotBadgeText: {
     fontFamily: Typography.bodyBold,
     fontSize: 12,
   },
+  contentOverlay: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    bottom: Spacing.lg,
+  },
   title: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 18,
-    color: Colors.text,
+    fontFamily: Typography.display,
+    fontSize: 30,
+    color: Colors.white,
     marginBottom: Spacing.xs,
-    lineHeight: 24,
-    paddingHorizontal: Spacing.xs,
+    lineHeight: 35,
   },
   hostRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
-    paddingHorizontal: Spacing.xs,
   },
   hostPhoto: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: Colors.mutedSurface,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.white + '24',
+    borderWidth: 1,
+    borderColor: Colors.white + '8F',
   },
   hostPhotoFallback: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.primary + '14',
+    backgroundColor: Colors.accent,
+    borderWidth: 1,
+    borderColor: Colors.white + '8F',
   },
   hostInitial: {
     fontFamily: Typography.bodyBold,
-    fontSize: 12,
-    color: Colors.primary,
+    fontSize: 13,
+    color: Colors.white,
   },
   hostTextWrap: {
     flex: 1,
     minWidth: 0,
   },
-  hostLabel: {
-    fontFamily: Typography.body,
-    fontSize: 10,
-    color: Colors.slate,
-  },
   hostName: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 13,
-    color: Colors.text,
+    fontFamily: Typography.bodyMed,
+    fontSize: 14,
+    color: Colors.white + 'E8',
   },
   approvalPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
+    width: 28,
+    height: 28,
     borderRadius: BorderRadius.pill,
-    backgroundColor: Colors.success + '12',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-  },
-  approvalText: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 10,
-    color: Colors.success,
+    backgroundColor: Colors.white + '22',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
-    gap: 4,
-    paddingHorizontal: Spacing.xs,
+    marginBottom: Spacing.md,
+    gap: 5,
   },
   infoText: {
     fontFamily: Typography.body,
-    fontSize: 13,
-    color: Colors.slate,
+    fontSize: 14,
+    color: Colors.white + 'D9',
     flexShrink: 1,
     minWidth: 0,
   },
-  trustMetaRow: {
+  bottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: Spacing.sm,
-    marginTop: 6,
-    paddingHorizontal: Spacing.xs,
+    gap: Spacing.md,
   },
-  progressText: {
-    fontFamily: Typography.bodyMed,
-    fontSize: 11,
-    color: Colors.slate,
-  },
-  participantPill: {
+  metricsRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    flexShrink: 1,
+    gap: Spacing.md,
+    minWidth: 0,
   },
-  participantText: {
-    fontFamily: Typography.bodyMed,
-    fontSize: 11,
-    color: Colors.slate,
-  },
-  joinBtn: {
-    backgroundColor: Colors.accent,
-    borderRadius: BorderRadius.button,
-    paddingVertical: 11,
-    paddingHorizontal: Spacing.lg,
-    alignSelf: 'stretch',
-    justifyContent: 'center',
-    marginTop: Spacing.md,
-    marginHorizontal: Spacing.xs,
-    marginBottom: Spacing.xs,
+  metricItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    minWidth: 0,
+  },
+  metricText: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  joinBtn: {
+    minWidth: 108,
+    minHeight: 52,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.pill,
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.md,
+    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
   },
   joinBtnDisabled: {
-    backgroundColor: Colors.slate,
-    opacity: 0.6,
+    backgroundColor: Colors.white + 'B8',
   },
   joinBtnText: {
-    color: Colors.white,
+    color: Colors.primary,
     fontFamily: Typography.bodyBold,
-    fontSize: 14,
+    fontSize: 15,
+  },
+  joinBtnTextDisabled: {
+    color: Colors.textSecondary,
   },
 });

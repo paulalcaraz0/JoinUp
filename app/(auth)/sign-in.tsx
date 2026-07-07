@@ -45,26 +45,9 @@ export default function SignInScreen() {
 
     setIsSubmitting(true);
     try {
-      if (__DEV__) {
-        console.log('[auth] sign-in screen submit', { email: normalizedEmail });
-      }
       await signIn(normalizedEmail, password);
-      if (__DEV__) {
-        console.log('[auth] sign-in screen navigation decision', {
-          destination: '/(tabs)',
-          reason: 'signIn resolved',
-        });
-      }
       router.replace('/(tabs)');
     } catch (e) {
-      if (__DEV__) {
-        console.log('[auth] sign-in screen caught error', {
-          message: (e as any)?.message,
-          stack: (e as any)?.stack,
-          cause: (e as any)?.cause,
-          query: (e as any)?.query,
-        });
-      }
       Alert.alert(
         'Sign in failed',
         (e as any)?.message ?? 'Could not sign in. Please check your credentials and try again.'

@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
+  ScrollView,
   View,
   Text,
   StyleSheet,
@@ -16,12 +17,12 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../../constants/theme';
 import { NavBar } from '../../components/layout/NavBar';
 import { CategoryChip } from '../../components/ui/CategoryChip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useActivities } from '../../hooks/useActivities';
-import { useLocation } from '../../hooks/useLocation';
 import { useUsers } from '../../hooks/useUsers';
 import type { Activity, User } from '../../types';
 import { format } from 'date-fns';
@@ -117,26 +118,12 @@ export default function ExploreScreen() {
     error: usersError,
     refetch: refetchUsers,
   } = useUsers();
-  const { location } = useLocation();
   const [viewMode, setViewMode] = useState<ViewMode>('events');
   const [showPlaceDropdown, setShowPlaceDropdown] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState('All Philippines');
   const [selectedDiscoveryFilter, setSelectedDiscoveryFilter] = useState<DiscoveryFilter>('All');
   const [eventSearchQuery, setEventSearchQuery] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
-
-  useEffect(() => {
-    if (!location?.city) return;
-
-    const city = location.city.toLowerCase();
-    const matched = PHILIPPINE_PLACES.find(
-      (place) => place.label !== 'All Philippines' && place.keywords.some((keyword) => keyword.includes(city))
-    );
-
-    if (matched) {
-      setSelectedPlace(matched.label);
-    }
-  }, [location?.city]);
 
   const selectedPlaceOption = useMemo(
     () => PHILIPPINE_PLACES.find((place) => place.label === selectedPlace) ?? PHILIPPINE_PLACES[0],
@@ -210,58 +197,61 @@ export default function ExploreScreen() {
 
       return (
         <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
-          <TouchableOpacity
-            style={[styles.exploreCard, Shadows.card]}
-            onPress={() => router.push(`/activity/${item.id}`)}
-            activeOpacity={0.92}
-          >
-            <View style={styles.coverImage}>
-              {item.coverImage ? (
-                <Image
-                  source={{ uri: item.coverImage }}
-                  style={styles.coverPhoto}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.coverPlaceholder}>
-                  <Ionicons name="image-outline" size={40} color={Colors.slate} />
-                </View>
-              )}
+        <TouchableOpacity
+          style={[styles.exploreCard, Shadows.card]}
+          onPress={() => router.push(`/activity/${item.id}`)}
+          activeOpacity={0.92}
+        >
+          {item.coverImage ? (
+            <Image
+              source={{ uri: item.coverImage }}
+              style={styles.exploreCardImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <LinearGradient
+              colors={[Colors.primarySoft, Colors.primary, '#0D1628']}
+              style={styles.exploreCardFallback}
+            >
+              <Ionicons name="calendar-outline" size={42} color={Colors.white} />
+            </LinearGradient>
+          )}
+
+          <LinearGradient
+            colors={['rgba(21, 34, 56, 0.04)', 'rgba(21, 34, 56, 0.28)', 'rgba(21, 34, 56, 0.88)']}
+            locations={[0.05, 0.42, 1]}
+            style={styles.exploreCardOverlay}
+          />
+
+          <View style={styles.exploreCardTop}>
+            <View />
+            <View style={styles.exploreCardCountPill}>
+              <Text style={styles.exploreCardCountText}>{joined}/{item.maxSlots}</Text>
             </View>
+          </View>
 
-            <View style={styles.cardInfo}>
-              <View style={styles.cardInfoTop}>
-                <View
-                  style={[
-                    styles.categoryChip,
-                    { backgroundColor: chipColor + '18', borderColor: chipColor },
-                  ]}
-                >
-                  <Text style={[styles.categoryText, { color: chipColor }]}>
-                    {item.category}
-                  </Text>
-                </View>
-                <Text style={styles.joinedText}>
-                  {joined}/{item.maxSlots} joined
-                </Text>
+          <View style={styles.exploreCardContent}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={styles.cardDescription} numberOfLines={2}>
+              {item.description || item.location.name}
+            </Text>
+
+            <Text style={styles.cardPriceLine} numberOfLines={1}>
+              {dateStr}
+            </Text>
+
+            <View style={styles.cardFooterRow}>
+              <View style={styles.exploreCardCta}>
+                <Text style={styles.exploreCardCtaText}>VIEW</Text>
+                <Ionicons name="eye-outline" size={13} color={Colors.primary} />
               </View>
-
-              <Text style={styles.cardTitle} numberOfLines={2}>
-                {item.title}
-              </Text>
-
-              <View style={styles.cardMeta}>
-                <View style={styles.metaItem}>
-                  <Ionicons name="location-outline" size={14} color={Colors.slate} />
-                  <Text style={styles.metaText} numberOfLines={2}>
-                    {item.location.name}
-                  </Text>
-                </View>
-                <Text style={styles.metaText} numberOfLines={1}>
-                  {dateStr}
-                </Text>
+              <View style={[styles.exploreCategoryPill, { backgroundColor: chipColor + '24' }]}>
+                <Text style={styles.exploreCategoryText}>{item.category}</Text>
               </View>
             </View>
+          </View>
           </TouchableOpacity>
         </Animated.View>
       );
@@ -402,17 +392,43 @@ export default function ExploreScreen() {
         </TouchableOpacity>
       </View>
 
+      {showPlaceDropdown && viewMode === 'events' ? (
+        <Pressable
+          style={styles.dropdownBackdrop}
+          onPress={() => setShowPlaceDropdown(false)}
+        />
+      ) : null}
+
       {viewMode === 'events' ? (
-        <View style={styles.locationWrap}>
-          <TouchableOpacity
-            style={styles.locationPill}
-            activeOpacity={0.85}
-            onPress={() => setShowPlaceDropdown((prev) => !prev)}
-          >
-            <Ionicons name="location" size={16} color={Colors.success} />
-            <Text style={styles.locationText}>{selectedPlace}</Text>
-            <Ionicons name={showPlaceDropdown ? 'chevron-up' : 'chevron-down'} size={14} color={Colors.slate} />
-          </TouchableOpacity>
+        <View style={styles.eventSearchWrap}>
+          <View style={styles.eventSearchRow}>
+            <View style={[styles.searchContainer, styles.searchInline]}>
+              <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search events by title or location"
+                placeholderTextColor={Colors.slate}
+                value={eventSearchQuery}
+                onChangeText={setEventSearchQuery}
+              />
+              {eventSearchQuery ? (
+                <TouchableOpacity onPress={() => setEventSearchQuery('')}>
+                  <Ionicons name="close-circle" size={18} color={Colors.slate} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <TouchableOpacity
+              style={[styles.locationFilterButton, showPlaceDropdown && styles.locationFilterButtonActive]}
+              activeOpacity={0.85}
+              onPress={() => setShowPlaceDropdown((prev) => !prev)}
+            >
+              <Ionicons
+                name="options-outline"
+                size={20}
+                color={showPlaceDropdown ? Colors.white : Colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
 
           {showPlaceDropdown ? (
             <View style={[styles.placeDropdown, Shadows.card]}>
@@ -434,33 +450,8 @@ export default function ExploreScreen() {
             </View>
           ) : null}
         </View>
-      ) : null}
-
-      {showPlaceDropdown && viewMode === 'events' ? (
-        <Pressable
-          style={styles.dropdownBackdrop}
-          onPress={() => setShowPlaceDropdown(false)}
-        />
-      ) : null}
-
-      {viewMode === 'events' ? (
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search events by title or location"
-            placeholderTextColor={Colors.slate}
-            value={eventSearchQuery}
-            onChangeText={setEventSearchQuery}
-          />
-          {eventSearchQuery ? (
-            <TouchableOpacity onPress={() => setEventSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color={Colors.slate} />
-            </TouchableOpacity>
-          ) : null}
-        </View>
       ) : (
-        <View style={styles.searchContainer}>
+        <View style={[styles.searchContainer, styles.searchStandalone]}>
           <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
@@ -478,7 +469,35 @@ export default function ExploreScreen() {
       )}
 
       {viewMode === 'events' ? (
-        <View style={styles.quickFilterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.quickFilterScroll}
+          contentContainerStyle={styles.quickFilterRow}
+        >
+          <TouchableOpacity
+            style={[
+              styles.locationPill,
+              selectedPlace !== 'All Philippines' && styles.locationPillActive,
+            ]}
+            activeOpacity={0.85}
+            onPress={() => setShowPlaceDropdown((prev) => !prev)}
+          >
+            <Ionicons
+              name="location"
+              size={15}
+              color={selectedPlace !== 'All Philippines' ? Colors.white : Colors.success}
+            />
+            <Text
+              style={[
+                styles.locationText,
+                selectedPlace !== 'All Philippines' && styles.locationTextActive,
+              ]}
+              numberOfLines={1}
+            >
+              {selectedPlace}
+            </Text>
+          </TouchableOpacity>
           {DiscoveryFilters.map((filter) => (
             <View key={filter} style={styles.quickFilterCell}>
               <CategoryChip
@@ -490,7 +509,7 @@ export default function ExploreScreen() {
               />
             </View>
           ))}
-        </View>
+        </ScrollView>
       ) : null}
 
       {viewMode === 'events' ? (
@@ -654,14 +673,19 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: Colors.divider,
     borderRadius: BorderRadius.input,
     paddingHorizontal: Spacing.md,
     ...Shadows.hairline,
+  },
+  searchInline: {
+    flex: 1,
+  },
+  searchStandalone: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
   },
   searchIcon: {
     marginRight: Spacing.sm,
@@ -673,28 +697,50 @@ const styles = StyleSheet.create({
     color: Colors.text,
     paddingVertical: Spacing.md,
   },
-  quickFilterRow: {
-    flexDirection: 'row',
-    gap: 6,
+  eventSearchWrap: {
+    position: 'relative',
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
+    zIndex: 30,
+  },
+  eventSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  locationFilterButton: {
+    width: 52,
+    height: 52,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.hairline,
+  },
+  locationFilterButtonActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  quickFilterScroll: {
+    maxHeight: 44,
+    marginBottom: Spacing.sm,
+  },
+  quickFilterRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    alignItems: 'center',
   },
   quickFilterCell: {
-    flex: 1,
+    flex: 0,
   },
   discoveryFilterChip: {
-    width: '100%',
     marginRight: 0,
     minHeight: 28,
     paddingHorizontal: 8,
     paddingVertical: 3,
-  },
-  locationWrap: {
-    position: 'relative',
-    marginLeft: Spacing.lg,
-    marginBottom: Spacing.md,
-    alignSelf: 'flex-start',
-    zIndex: 30,
   },
   locationPill: {
     flexDirection: 'row',
@@ -706,10 +752,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     gap: 4,
+    maxWidth: 190,
+  },
+  locationPillActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
   placeDropdown: {
     position: 'absolute',
-    top: 40,
+    top: 58,
     left: 0,
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.card,
@@ -743,6 +794,10 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyMed,
     fontSize: 14,
     color: Colors.text,
+    flexShrink: 1,
+  },
+  locationTextActive: {
+    color: Colors.white,
   },
   listShell: {
     flex: 1,
@@ -831,27 +886,54 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   exploreCard: {
-    backgroundColor: Colors.white,
-    borderRadius: BorderRadius.card,
+    height: 280,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.sheet,
     marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.divider,
-  },
-  coverImage: {
-    height: 160,
-    backgroundColor: Colors.primary + '15',
     position: 'relative',
   },
-  coverPhoto: {
+  exploreCardImage: {
+    ...StyleSheet.absoluteFillObject,
     width: '100%',
     height: '100%',
   },
-  coverPlaceholder: {
-    flex: 1,
+  exploreCardFallback: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  exploreCardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  exploreCardTop: {
+    position: 'absolute',
+    top: Spacing.md,
+    left: Spacing.md,
+    right: Spacing.md,
+    zIndex: 2,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  exploreCardCountPill: {
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  exploreCardCountText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 11,
+    color: Colors.primary,
+  },
+  exploreCardContent: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    bottom: Spacing.lg,
+    zIndex: 2,
   },
   distanceBadge: {
     position: 'absolute',
@@ -893,11 +975,56 @@ const styles = StyleSheet.create({
     color: Colors.slate,
   },
   cardTitle: {
+    fontFamily: Typography.display,
+    fontSize: 27,
+    color: Colors.white,
+    marginBottom: Spacing.sm,
+    lineHeight: 32,
+  },
+  cardDescription: {
+    fontFamily: Typography.bodyMed,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.84)',
+    lineHeight: 20,
+    marginBottom: Spacing.md,
+  },
+  cardPriceLine: {
     fontFamily: Typography.bodyBold,
-    fontSize: 17,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-    lineHeight: 23,
+    fontSize: 13,
+    color: Colors.white,
+    marginBottom: Spacing.md,
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  exploreCardCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.white,
+    paddingHorizontal: 15,
+    paddingVertical: 9,
+  },
+  exploreCardCtaText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.primary,
+  },
+  exploreCategoryPill: {
+    borderRadius: BorderRadius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.16)',
+  },
+  exploreCategoryText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 11,
+    color: Colors.white,
   },
   cardMeta: {
     flexDirection: 'row',

@@ -134,6 +134,7 @@ export default function HomeFeedScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [fadingActivityIds, setFadingActivityIds] = useState<string[]>([]);
   const [showGreetingCard, setShowGreetingCard] = useState(true);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [avatarLoadFailed, setAvatarLoadFailed] = useState(false);
   const lastScrollYRef = useRef(0);
@@ -372,23 +373,6 @@ export default function HomeFeedScreen() {
         </Text>
       </Animated.View>
       */}
-      <ScrollView
-        horizontal
-        style={styles.chipsScroll}
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.chipsContainer}
-      >
-        {Categories.map((cat) => (
-          <CategoryChip
-            key={cat}
-            label={cat}
-            selected={selectedCategory === cat}
-            onPress={() => setSelectedCategory(cat)}
-            size="sm"
-          />
-        ))}
-      </ScrollView>
-
       {showGreetingCard ? (
         <Animated.View
           entering={FadeInDown.duration(220)}
@@ -413,15 +397,37 @@ export default function HomeFeedScreen() {
         </Animated.View>
       ) : null}
 
-      <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={18} color={Colors.slate} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search activities..."
-          placeholderTextColor={Colors.slate}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
+      <View style={styles.headerControls}>
+        <TouchableOpacity
+          style={[
+            styles.categoryFilterBtn,
+            selectedCategory !== 'All' && styles.categoryFilterBtnActive,
+          ]}
+          onPress={() => setShowCategoryPicker((current) => !current)}
+          activeOpacity={0.86}
+        >
+          <Ionicons
+            name="options-outline"
+            size={19}
+            color={selectedCategory !== 'All' ? Colors.white : Colors.primary}
+          />
+          {selectedCategory !== 'All' ? (
+            <Text style={styles.categoryFilterActiveText} numberOfLines={1}>
+              {selectedCategory}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
+
+        <View style={styles.searchContainer}>
+          <Ionicons name="search-outline" size={18} color={Colors.slate} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search activities..."
+            placeholderTextColor={Colors.slate}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+        </View>
       </View>
 
       <ScrollView
@@ -440,6 +446,27 @@ export default function HomeFeedScreen() {
           />
         ))}
       </ScrollView>
+
+      {showCategoryPicker ? (
+        <Animated.View
+          entering={FadeInDown.duration(160)}
+          exiting={FadeOutUp.duration(120)}
+          style={styles.categoryPicker}
+        >
+          {Categories.map((cat) => (
+            <CategoryChip
+              key={cat}
+              label={cat}
+              selected={selectedCategory === cat}
+              onPress={() => {
+                setSelectedCategory(cat);
+                setShowCategoryPicker(false);
+              }}
+              size="sm"
+            />
+          ))}
+        </Animated.View>
+      ) : null}
 
       {/* Activity Feed */}
       <View style={styles.feedContainer}>
@@ -509,10 +536,11 @@ export default function HomeFeedScreen() {
         onPress={handleOpenBuddy}
         activeOpacity={0.88}
       >
-        <View style={styles.buddyFloatingIcon}>
-          <Ionicons name="sparkles" size={18} color={Colors.white} />
-        </View>
-        <Text style={styles.buddyFloatingText}>Ask JoinUp Buddy</Text>
+        <Image
+          source={require('../../assets/icon.png')}
+          style={styles.buddyFloatingIcon}
+          resizeMode="cover"
+        />
       </TouchableOpacity>
     </View>
   );
@@ -638,22 +666,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.white,
   },
-  chipsScroll: {
-    maxHeight: 44,
-  },
-  chipsContainer: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 2,
-    paddingBottom: 4,
+  headerControls: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  categoryFilterBtn: {
+    minWidth: 48,
+    height: 48,
+    borderRadius: BorderRadius.input,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 13,
+    ...Shadows.soft,
+  },
+  categoryFilterBtnActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+    maxWidth: 118,
+  },
+  categoryFilterActiveText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
+    flexShrink: 1,
   },
   searchContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.white,
     borderRadius: BorderRadius.input,
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
     paddingHorizontal: Spacing.md,
     paddingVertical: 13,
     borderWidth: 1,
@@ -676,6 +726,19 @@ const styles = StyleSheet.create({
   quickFilterContainer: {
     paddingHorizontal: Spacing.lg,
     alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  categoryPicker: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    padding: Spacing.sm,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.card,
+    borderWidth: 1,
+    borderColor: Colors.divider,
   },
   skeletonList: {
     paddingTop: Spacing.xs,
@@ -694,28 +757,19 @@ const styles = StyleSheet.create({
   buddyFloatingButton: {
     position: 'absolute',
     right: Spacing.lg,
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.pill,
-    paddingVertical: 11,
-    paddingLeft: 10,
-    paddingRight: 14,
+    justifyContent: 'center',
+    width: 58,
+    height: 58,
+    backgroundColor: Colors.white,
+    borderRadius: BorderRadius.full,
+    padding: 4,
     zIndex: 20,
     ...Shadows.fab,
   },
   buddyFloatingIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: Colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buddyFloatingText: {
-    fontFamily: Typography.bodyBold,
-    fontSize: 13,
-    color: Colors.white,
+    width: '100%',
+    height: '100%',
+    borderRadius: BorderRadius.full,
   },
 });
