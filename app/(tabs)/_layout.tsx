@@ -4,17 +4,19 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Shadows } from '../../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: Colors.white,
-          borderTopColor: Colors.divider,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.divider,
           borderTopWidth: 1,
           height: 58 + insets.bottom,
           paddingBottom: Math.max(insets.bottom - 2, 4),
@@ -27,13 +29,13 @@ export default function TabsLayout() {
           right: 0,
           bottom: 0,
           elevation: 12,
-          shadowColor: '#152238',
+          shadowColor: colors.primary,
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: 0.08,
           shadowRadius: 14,
         },
-        tabBarActiveTintColor: Colors.accent,
-        tabBarInactiveTintColor: Colors.slate,
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.slate,
         tabBarLabelStyle: {
           fontFamily: Typography.bodyMed,
           fontSize: 11,
@@ -64,8 +66,13 @@ export default function TabsLayout() {
         options={{
           title: 'Post',
           tabBarIcon: ({ color, focused }) => (
-            <View style={[styles.postButton, focused && styles.postButtonActive]}>
-              <Ionicons name="add" size={28} color={Colors.white} />
+            <View
+              style={[
+                styles.postButton,
+                { backgroundColor: focused ? colors.primary : colors.accent },
+              ]}
+            >
+              <Ionicons name="add" size={28} color={colors.white} />
             </View>
           ),
           tabBarLabel: () => null,

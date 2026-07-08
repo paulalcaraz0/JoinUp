@@ -20,6 +20,7 @@ import { supabase } from '../../lib/supabase';
 import { ratingService, type RateableActivity } from '../../lib/api/ratingService';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Activity, User } from '../../types';
 
 interface UserWithActivities extends User {
@@ -79,6 +80,7 @@ function mapActivity(row: any): Activity {
 export default function UserProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const currentUser = useAuthStore((state) => state.user);
 
@@ -215,19 +217,19 @@ export default function UserProfileScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
         <Header onBack={() => router.back()} />
-        <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+        <ActivityIndicator size="large" color={colors.accent} style={styles.loader} />
       </View>
     );
   }
 
   if (error || !profile) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
         <Header onBack={() => router.back()} />
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error || 'User not found'}</Text>
+          <Text style={[styles.errorText, { color: colors.slate }]}>{error || 'User not found'}</Text>
         </View>
       </View>
     );
@@ -283,7 +285,7 @@ export default function UserProfileScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
       <Header onBack={() => router.back()} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -479,12 +481,14 @@ export default function UserProfileScreen() {
 }
 
 function Header({ onBack }: { onBack: () => void }) {
+  const { colors } = useThemeColors();
+
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.divider }]}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Ionicons name="chevron-back" size={24} color={Colors.text} />
+        <Ionicons name="chevron-back" size={24} color={colors.text} />
       </TouchableOpacity>
-      <Text style={styles.headerTitle}>User Profile</Text>
+      <Text style={[styles.headerTitle, { color: colors.text }]}>User Profile</Text>
       <View style={styles.backBtn} />
     </View>
   );
@@ -503,35 +507,37 @@ function ActivitySection({
   activities: Activity[];
   onPress: (activityId: string) => void;
 }) {
+  const { colors } = useThemeColors();
+
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeadingRow}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <View style={styles.sectionCountPill}>
-          <Text style={styles.sectionCountText}>{count}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+        <View style={[styles.sectionCountPill, { backgroundColor: colors.accentSoft }]}>
+          <Text style={[styles.sectionCountText, { color: colors.accent }]}>{count}</Text>
         </View>
       </View>
       {activities.length === 0 ? (
-        <View style={styles.emptyActivityCard}>
-          <Ionicons name="calendar-clear-outline" size={22} color={Colors.slate} />
-          <Text style={styles.emptyActivityText}>{emptyText}</Text>
+        <View style={[styles.emptyActivityCard, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+          <Ionicons name="calendar-clear-outline" size={22} color={colors.slate} />
+          <Text style={[styles.emptyActivityText, { color: colors.slate }]}>{emptyText}</Text>
         </View>
       ) : null}
       {activities.map((activity, index) => (
         <Animated.View key={activity.id} entering={FadeInDown.delay(index * 80).springify()}>
           <TouchableOpacity
-            style={[styles.activityCard, Shadows.card]}
+            style={[styles.activityCard, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}
             onPress={() => onPress(activity.id)}
             activeOpacity={0.92}
           >
             <View style={styles.activityCardAccent} />
             <View style={styles.activityMainRow}>
-              <View style={styles.activityIconBox}>
-                <Ionicons name="calendar-outline" size={19} color={Colors.accent} />
+              <View style={[styles.activityIconBox, { backgroundColor: colors.accentSoft }]}>
+                <Ionicons name="calendar-outline" size={19} color={colors.accent} />
               </View>
               <View style={styles.activityBody}>
                 <View style={styles.activityTopRow}>
-                  <Text style={styles.activityTitle} numberOfLines={2}>
+                  <Text style={[styles.activityTitle, { color: colors.text }]} numberOfLines={2}>
                     {activity.title}
                   </Text>
                   <View
@@ -547,20 +553,20 @@ function ActivitySection({
                 </View>
                 <View style={styles.activityMeta}>
                   <View style={styles.metaItem}>
-                    <Ionicons name="location-outline" size={12} color={Colors.slate} />
-                    <Text style={styles.metaText} numberOfLines={1}>
+                    <Ionicons name="location-outline" size={12} color={colors.slate} />
+                    <Text style={[styles.metaText, { color: colors.slate }]} numberOfLines={1}>
                       {activity.location.name || 'Location TBD'}
                     </Text>
                   </View>
                   <View style={styles.metaItem}>
-                    <Ionicons name="time-outline" size={12} color={Colors.slate} />
-                    <Text style={styles.metaText} numberOfLines={1}>
+                    <Ionicons name="time-outline" size={12} color={colors.slate} />
+                    <Text style={[styles.metaText, { color: colors.slate }]} numberOfLines={1}>
                       {activity.dateTime ? format(new Date(activity.dateTime), 'MMM d, yyyy') : 'Date TBD'}
                     </Text>
                   </View>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={18} color={Colors.slate} />
+              <Ionicons name="chevron-forward" size={18} color={colors.slate} />
             </View>
           </TouchableOpacity>
         </Animated.View>

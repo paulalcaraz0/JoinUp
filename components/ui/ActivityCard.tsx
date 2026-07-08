@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { format } from 'date-fns';
 import { Colors, Typography, BorderRadius, Spacing, Shadows, CategoryColors } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Activity } from '../../types';
 
 interface ActivityCardProps {
@@ -28,10 +29,11 @@ function ActivityCardComponent({
   joinLabel,
   joinDisabled = false,
 }: ActivityCardProps) {
+  const { colors, isDark } = useThemeColors();
   const slotsLeft = activity.currentSlots;
   const isFull = slotsLeft <= 0;
   const isActionDisabled = isFull || isLeaving || joinDisabled;
-  const chipColor = CategoryColors[activity.category] ?? Colors.accent;
+  const chipColor = CategoryColors[activity.category] ?? colors.accent;
   const dateStr = activity.dateTime ? format(new Date(activity.dateTime), 'EEE, h:mm a') : '';
   const joined = activity.maxSlots - activity.currentSlots;
   const hostInitial = (activity.hostName || 'H').trim().charAt(0).toUpperCase();
@@ -40,7 +42,13 @@ function ActivityCardComponent({
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
       <TouchableOpacity
-        style={[styles.card, Shadows.card, style, isLeaving && styles.cardLeaving]}
+        style={[
+          styles.card,
+          Shadows.card,
+          { backgroundColor: colors.primary, borderColor: isDark ? colors.divider : 'transparent' },
+          style,
+          isLeaving && styles.cardLeaving,
+        ]}
         onPress={onPress}
         activeOpacity={0.92}
         disabled={isLeaving}
@@ -49,7 +57,7 @@ function ActivityCardComponent({
           <Image source={{ uri: activity.coverImage }} style={styles.coverPhoto} resizeMode="cover" />
         ) : (
           <LinearGradient
-            colors={[Colors.primarySoft, Colors.primary, '#0E1726']}
+            colors={[colors.primarySoft, colors.primary, isDark ? '#111827' : '#0E1726']}
             style={styles.coverPhoto}
           >
             <Ionicons name="calendar-outline" size={42} color={Colors.white + 'B8'} />
@@ -72,7 +80,7 @@ function ActivityCardComponent({
             <Text style={[styles.categoryText, { color: chipColor }]}>{activity.category}</Text>
           </View>
           <View style={[styles.slotBadge, { backgroundColor: isFull ? Colors.danger : Colors.white + 'E8' }]}>
-            <Text style={[styles.slotBadgeText, { color: isFull ? Colors.white : Colors.primary }]}>
+            <Text style={[styles.slotBadgeText, { color: isFull ? Colors.white : colors.primary }]}>
               {isFull ? 'Full' : `${slotsLeft} left`}
             </Text>
           </View>
@@ -87,7 +95,7 @@ function ActivityCardComponent({
             {activity.hostPhoto ? (
               <Image source={{ uri: activity.hostPhoto }} style={styles.hostPhoto} resizeMode="cover" />
             ) : (
-              <View style={styles.hostPhotoFallback}>
+              <View style={[styles.hostPhotoFallback, { backgroundColor: colors.accent }]}>
                 <Text style={styles.hostInitial}>{hostInitial}</Text>
               </View>
             )}
@@ -123,7 +131,7 @@ function ActivityCardComponent({
             </View>
 
             <TouchableOpacity
-              style={[styles.joinBtn, isActionDisabled && styles.joinBtnDisabled]}
+              style={[styles.joinBtn, { backgroundColor: colors.white }, isActionDisabled && styles.joinBtnDisabled]}
               onPress={(event) => {
                 event.stopPropagation?.();
                 onJoin();
@@ -131,10 +139,10 @@ function ActivityCardComponent({
               disabled={isActionDisabled}
               activeOpacity={0.82}
             >
-              <Text style={[styles.joinBtnText, isActionDisabled && styles.joinBtnTextDisabled]}>
+              <Text style={[styles.joinBtnText, { color: colors.primary }, isActionDisabled && styles.joinBtnTextDisabled]}>
                 {actionLabel}
               </Text>
-              {!isActionDisabled ? <Ionicons name="add" size={20} color={Colors.primary} /> : null}
+              {!isActionDisabled ? <Ionicons name="add" size={20} color={colors.primary} /> : null}
             </TouchableOpacity>
           </View>
         </View>
@@ -149,6 +157,8 @@ const styles = StyleSheet.create({
   card: {
     height: 420,
     backgroundColor: Colors.primary,
+    borderWidth: 1,
+    borderColor: 'transparent',
     borderRadius: 28,
     marginBottom: Spacing.lg,
     marginHorizontal: Spacing.lg,
@@ -306,7 +316,6 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white + 'B8',
   },
   joinBtnText: {
-    color: Colors.primary,
     fontFamily: Typography.bodyBold,
     fontSize: 15,
   },

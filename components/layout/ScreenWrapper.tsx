@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface ScreenWrapperProps {
   children: React.ReactNode;
@@ -19,12 +20,14 @@ export function ScreenWrapper({
   statusBarStyle = 'dark-content',
 }: ScreenWrapperProps) {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useThemeColors();
+  const resolvedBackgroundColor = backgroundColor === Colors.cream ? colors.cream : backgroundColor;
 
   return (
     <View
       style={[
         styles.container,
-        { backgroundColor },
+        { backgroundColor: resolvedBackgroundColor },
         edges.includes('top') && { paddingTop: insets.top },
         edges.includes('bottom') && { paddingBottom: insets.bottom },
         edges.includes('left') && { paddingLeft: insets.left },
@@ -32,7 +35,10 @@ export function ScreenWrapper({
         style,
       ]}
     >
-      <StatusBar barStyle={statusBarStyle} backgroundColor={backgroundColor} />
+      <StatusBar
+        barStyle={statusBarStyle === 'dark-content' && isDark ? 'light-content' : statusBarStyle}
+        backgroundColor={resolvedBackgroundColor}
+      />
       {children}
     </View>
   );

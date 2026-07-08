@@ -31,6 +31,7 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { MessageSkeleton } from '../../components/ui/LoadingSkeleton';
 import { clearChatActivityUnread, useChat } from '../../hooks/useChat';
 import { useActivities } from '../../hooks/useActivities';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { InputLimits, trimInput } from '../../lib/validation';
@@ -189,6 +190,7 @@ const MessageRow = React.memo(function MessageRow({
   onDelete,
   onOpenImages,
 }: MessageRowProps) {
+  const { colors } = useThemeColors();
   const isMe = message.senderId === currentUserId;
   const isSystem = message.type === 'system';
   const timeStr = message.createdAt
@@ -208,7 +210,7 @@ const MessageRow = React.memo(function MessageRow({
     message.senderPhoto ? (
       <Image source={{ uri: message.senderPhoto }} style={styles.messageAvatar} resizeMode="cover" />
     ) : (
-      <View style={styles.messageAvatarFallback}>
+      <View style={[styles.messageAvatarFallback, { backgroundColor: colors.primary }]}>
         <Text style={styles.messageAvatarInitial}>{senderInitial}</Text>
       </View>
     )
@@ -229,7 +231,7 @@ const MessageRow = React.memo(function MessageRow({
   if (isSystem) {
     return (
       <View style={styles.systemMessage}>
-        <Text style={styles.systemText}>{message.text}</Text>
+        <Text style={[styles.systemText, { color: colors.slate }]}>{message.text}</Text>
       </View>
     );
   }
@@ -243,7 +245,7 @@ const MessageRow = React.memo(function MessageRow({
       <>
         {!isMe ? (
           <View style={styles.senderInfo}>
-            <Text style={styles.senderName}>{message.senderName}</Text>
+            <Text style={[styles.senderName, { color: colors.slate }]}>{message.senderName}</Text>
           </View>
         ) : null}
         <TouchableOpacity
@@ -313,8 +315,8 @@ const MessageRow = React.memo(function MessageRow({
                 onPress={handleRetryImage}
                 activeOpacity={0.82}
               >
-                <Ionicons name="refresh-outline" size={22} color={Colors.slate} />
-                <Text style={styles.imageRetryText}>
+                <Ionicons name="refresh-outline" size={22} color={colors.slate} />
+                <Text style={[styles.imageRetryText, { color: colors.slate }]}>
                   Tap to retry image
                 </Text>
               </TouchableOpacity>
@@ -352,7 +354,7 @@ const MessageRow = React.memo(function MessageRow({
               </>
             )}
           </View>
-          <Text style={styles.timeText}>{timeStr}</Text>
+          <Text style={[styles.timeText, { color: colors.slate }]}>{timeStr}</Text>
         </TouchableOpacity>
       </>
     );
@@ -372,17 +374,23 @@ const MessageRow = React.memo(function MessageRow({
       <>
         {!isMe ? (
           <View style={styles.senderInfo}>
-            <Text style={styles.senderName}>{message.senderName}</Text>
+            <Text style={[styles.senderName, { color: colors.slate }]}>{message.senderName}</Text>
           </View>
         ) : null}
-        <View style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived, styles.imageBubble]}>
+        <View
+          style={[
+            styles.bubble,
+            isMe ? styles.bubbleSent : [styles.bubbleReceived, { backgroundColor: colors.surface, borderColor: colors.divider }],
+            styles.imageBubble,
+          ]}
+        >
           <View style={styles.imageUnavailableWrap}>
-            <Ionicons name="image-outline" size={22} color={Colors.slate} />
-            <Text style={styles.imageUnavailableText}>
+            <Ionicons name="image-outline" size={22} color={colors.slate} />
+            <Text style={[styles.imageUnavailableText, { color: colors.slate }]}>
               Image unavailable
             </Text>
           </View>
-          <Text style={styles.timeText}>{timeStr}</Text>
+          <Text style={[styles.timeText, { color: colors.slate }]}>{timeStr}</Text>
         </View>
       </>
     );
@@ -415,15 +423,15 @@ const MessageRow = React.memo(function MessageRow({
       {senderAvatar}
       <View style={styles.receivedBubbleWrap}>
         <View style={styles.senderInfo}>
-          <Text style={styles.senderName}>{message.senderName}</Text>
+          <Text style={[styles.senderName, { color: colors.slate }]}>{message.senderName}</Text>
         </View>
         <TouchableOpacity
           activeOpacity={0.9}
           onLongPress={handleDelete}
-          style={[styles.bubble, styles.bubbleReceived]}
+          style={[styles.bubble, styles.bubbleReceived, { backgroundColor: colors.surface, borderColor: colors.divider }]}
         >
-          <Text style={styles.bubbleText}>{message.text}</Text>
-          <Text style={styles.timeText}>{timeStr}</Text>
+          <Text style={[styles.bubbleText, { color: colors.text }]}>{message.text}</Text>
+          <Text style={[styles.timeText, { color: colors.slate }]}>{timeStr}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -436,6 +444,7 @@ export default function GroupChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  const { colors } = useThemeColors();
   const user = useAuthStore((s) => s.user);
   const { activities, getJoinStatus, canAccessChat } = useActivities();
   const { messages, isLoading, error: chatError, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch } = useChat(id);
@@ -980,25 +989,25 @@ export default function GroupChatScreen() {
     const isRejected = joinStatus === 'rejected';
 
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}> 
-        <View style={styles.header}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}> 
+        <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.divider }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={Colors.text} />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
+            <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
               {activity.title}
             </Text>
-            <Text style={styles.headerSubtitle}>Chat access required</Text>
+            <Text style={[styles.headerSubtitle, { color: colors.slate }]}>Chat access required</Text>
           </View>
         </View>
 
         <View style={styles.lockedWrap}>
-          <View style={styles.lockedIconWrap}>
-            <Ionicons name="lock-closed" size={28} color={Colors.slate} />
+          <View style={[styles.lockedIconWrap, { backgroundColor: colors.divider }]}>
+            <Ionicons name="lock-closed" size={28} color={colors.slate} />
           </View>
-          <Text style={styles.lockedTitle}>{isRejected ? 'Join request not approved' : 'Waiting for approval'}</Text>
-          <Text style={styles.lockedBody}>
+          <Text style={[styles.lockedTitle, { color: colors.text }]}>{isRejected ? 'Join request not approved' : 'Waiting for approval'}</Text>
+          <Text style={[styles.lockedBody, { color: colors.slate }]}>
             {isRejected
               ? 'You cannot access this chat because the request was not approved.'
               : 'Once approved, this chat unlocks instantly.'}
@@ -1010,39 +1019,39 @@ export default function GroupChatScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
+      style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.divider }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={Colors.text} />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
+          <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>
             {activity?.title ?? 'Chat'}
           </Text>
-          <Text style={styles.headerSubtitle}>
+          <Text style={[styles.headerSubtitle, { color: colors.slate }]}>
             {activity?.participants.length ?? 0} participants
           </Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity
             onPress={() => setIsInfoVisible(true)}
-            style={styles.headerIconBtn}
+            style={[styles.headerIconBtn, { backgroundColor: colors.mutedSurface, borderColor: colors.divider }]}
             accessibilityRole="button"
             accessibilityLabel="Open activity information"
           >
-            <Ionicons name="information-circle-outline" size={22} color={Colors.text} />
+            <Ionicons name="information-circle-outline" size={22} color={colors.text} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={openSafetyMenu}
-            style={styles.headerIconBtn}
+            style={[styles.headerIconBtn, { backgroundColor: colors.mutedSurface, borderColor: colors.divider }]}
             accessibilityRole="button"
             accessibilityLabel="Open chat safety options"
           >
-            <Ionicons name="shield-checkmark-outline" size={22} color={Colors.text} />
+            <Ionicons name="shield-checkmark-outline" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -1054,43 +1063,43 @@ export default function GroupChatScreen() {
         onRequestClose={() => setIsInfoVisible(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={[styles.infoSheet, { paddingBottom: insets.bottom + Spacing.lg }]}>
-            <View style={styles.sheetHandle} />
+          <View style={[styles.infoSheet, { paddingBottom: insets.bottom + Spacing.lg, backgroundColor: colors.cream }]}>
+            <View style={[styles.sheetHandle, { backgroundColor: colors.divider }]} />
             <View style={styles.sheetHeader}>
               <View>
-                <Text style={styles.sheetTitle}>Activity Info</Text>
-                <Text style={styles.sheetSubtitle}>{chatPeople.length} people in this chat</Text>
+                <Text style={[styles.sheetTitle, { color: colors.text }]}>Activity Info</Text>
+                <Text style={[styles.sheetSubtitle, { color: colors.slate }]}>{chatPeople.length} people in this chat</Text>
               </View>
               <TouchableOpacity
                 onPress={() => setIsInfoVisible(false)}
-                style={styles.sheetCloseBtn}
+                style={[styles.sheetCloseBtn, { backgroundColor: colors.surface }]}
                 accessibilityRole="button"
                 accessibilityLabel="Close activity information"
               >
-                <Ionicons name="close" size={22} color={Colors.text} />
+                <Ionicons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
             {activity ? (
-              <View style={styles.activityInfoCard}>
-                <Text style={styles.infoActivityTitle} numberOfLines={2}>{activity.title}</Text>
+              <View style={[styles.activityInfoCard, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+                <Text style={[styles.infoActivityTitle, { color: colors.text }]} numberOfLines={2}>{activity.title}</Text>
                 <View style={styles.infoMetaRow}>
-                  <Ionicons name="time-outline" size={14} color={Colors.slate} />
-                  <Text style={styles.infoMetaText}>
+                  <Ionicons name="time-outline" size={14} color={colors.slate} />
+                  <Text style={[styles.infoMetaText, { color: colors.textSecondary }]}>
                     {activity.dateTime ? format(new Date(activity.dateTime), 'EEE, MMM d, h:mm a') : 'Date TBD'}
                   </Text>
                 </View>
                 <View style={styles.infoMetaRow}>
-                  <Ionicons name="location-outline" size={14} color={Colors.slate} />
-                  <Text style={styles.infoMetaText} numberOfLines={2}>
+                  <Ionicons name="location-outline" size={14} color={colors.slate} />
+                  <Text style={[styles.infoMetaText, { color: colors.textSecondary }]} numberOfLines={2}>
                     {activity.location.name || 'Location TBD'}
                   </Text>
                 </View>
               </View>
             ) : null}
 
-            <Text style={styles.peopleSectionTitle}>People</Text>
-            <View style={styles.peopleList}>
+            <Text style={[styles.peopleSectionTitle, { color: colors.text }]}>People</Text>
+            <View style={[styles.peopleList, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
               {chatPeople.map((person, index) => {
                 const isCreator = activity?.hostId === person.id;
                 const initial = (person.displayName || (isCreator ? 'C' : 'P')).trim().charAt(0).toUpperCase();
@@ -1100,15 +1109,15 @@ export default function GroupChatScreen() {
                     {person.photoUrl ? (
                       <Image source={{ uri: person.photoUrl }} style={styles.personPhoto} resizeMode="cover" />
                     ) : (
-                      <View style={styles.personPlaceholder}>
+                      <View style={[styles.personPlaceholder, { backgroundColor: colors.primary }]}>
                         <Text style={styles.personInitial}>{initial}</Text>
                       </View>
                     )}
                     <View style={styles.personInfo}>
-                      <Text style={styles.personName} numberOfLines={1}>
+                      <Text style={[styles.personName, { color: colors.text }]} numberOfLines={1}>
                         {person.displayName || (isCreator ? 'Creator' : 'Participant')}
                       </Text>
-                      <Text style={styles.personRole}>{isCreator ? 'Creator' : 'Participant'}</Text>
+                      <Text style={[styles.personRole, { color: colors.slate }]}>{isCreator ? 'Creator' : 'Participant'}</Text>
                     </View>
                     {isCreator ? (
                       <View style={styles.creatorBadge}>
@@ -1195,8 +1204,8 @@ export default function GroupChatScreen() {
       {/* Pinned message banner */}
       {pinnedMessage && (
         <View style={styles.pinnedBanner}>
-          <Ionicons name="pin" size={14} color={Colors.accent} />
-          <Text style={styles.pinnedText} numberOfLines={1}>
+          <Ionicons name="pin" size={14} color={colors.accent} />
+          <Text style={[styles.pinnedText, { color: colors.text }]} numberOfLines={1}>
             {pinnedMessage.text}
           </Text>
         </View>
@@ -1240,9 +1249,9 @@ export default function GroupChatScreen() {
           renderItem={renderMessage}
           ListEmptyComponent={
             <View style={styles.emptyMessagesWrap}>
-              <Ionicons name="chatbubble-ellipses-outline" size={34} color={Colors.slate} />
-              <Text style={styles.emptyMessagesTitle}>No messages yet</Text>
-              <Text style={styles.emptyMessagesBody}>Say hello and help the group get started.</Text>
+              <Ionicons name="chatbubble-ellipses-outline" size={34} color={colors.slate} />
+              <Text style={[styles.emptyMessagesTitle, { color: colors.text }]}>No messages yet</Text>
+              <Text style={[styles.emptyMessagesBody, { color: colors.slate }]}>Say hello and help the group get started.</Text>
             </View>
           }
           initialNumToRender={14}
@@ -1259,26 +1268,26 @@ export default function GroupChatScreen() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handleRefresh}
-              tintColor={Colors.accent}
-              colors={[Colors.accent]}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
             />
           }
         />
       )}
 
       {/* Input bar */}
-      <View style={[styles.inputBar, { paddingBottom: insets.bottom + Spacing.sm }]}>
+      <View style={[styles.inputBar, { paddingBottom: insets.bottom + Spacing.sm, backgroundColor: colors.surface, borderTopColor: colors.divider }]}>
         <TouchableOpacity
           style={styles.attachBtn}
           onPress={handleAttachPhoto}
           disabled={isUploadingImage || isSharingLocation}
         >
-          <Ionicons name="add-circle-outline" size={26} color={Colors.slate} />
+          <Ionicons name="add-circle-outline" size={26} color={colors.slate} />
         </TouchableOpacity>
         <TextInput
-          style={styles.textInput}
+          style={[styles.textInput, { backgroundColor: colors.cream, borderColor: colors.divider, color: colors.text }]}
           placeholder="Type a message..."
-          placeholderTextColor={Colors.slate}
+          placeholderTextColor={colors.slate}
           value={inputText}
           onChangeText={setInputText}
           multiline
@@ -1292,18 +1301,18 @@ export default function GroupChatScreen() {
           <Ionicons
             name={isSharingLocation ? 'hourglass-outline' : 'location-outline'}
             size={20}
-            color={Colors.slate}
+            color={colors.slate}
           />
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
+          style={[styles.sendBtn, { backgroundColor: colors.accent }, !inputText.trim() && styles.sendBtnDisabled]}
           onPress={handleSend}
           disabled={!inputText.trim()}
         >
           <Ionicons
             name="send"
             size={20}
-            color={inputText.trim() ? Colors.white : Colors.slate}
+            color={inputText.trim() ? Colors.white : colors.slate}
           />
         </TouchableOpacity>
       </View>

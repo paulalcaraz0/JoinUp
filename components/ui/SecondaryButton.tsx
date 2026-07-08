@@ -8,6 +8,7 @@ import {
   TextStyle,
 } from 'react-native';
 import { Colors, Typography, BorderRadius, Spacing, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface SecondaryButtonProps {
   title: string;
@@ -28,10 +29,13 @@ export function SecondaryButton({
   textStyle,
   icon,
 }: SecondaryButtonProps) {
+  const { colors } = useThemeColors();
+
   return (
     <TouchableOpacity
       style={[
         styles.button,
+        { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
         disabled && styles.disabled,
         style,
       ]}
@@ -40,11 +44,11 @@ export function SecondaryButton({
       activeOpacity={0.85}
     >
       {loading ? (
-        <ActivityIndicator color={Colors.text} size="small" />
+        <ActivityIndicator color={colors.text} size="small" />
       ) : (
         <>
           {icon}
-          <Text style={[styles.text, textStyle]}>{title}</Text>
+          <Text style={[styles.text, { color: colors.text }, textStyle]}>{title}</Text>
         </>
       )}
     </TouchableOpacity>

@@ -1,14 +1,18 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Colors, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 function SkeletonBlock({ style }: { style?: object }) {
-  return <View style={[styles.block, style]} />;
+  const { colors } = useThemeColors();
+  return <View style={[styles.block, { backgroundColor: colors.divider }, style]} />;
 }
 
 export function ActivityCardSkeleton() {
+  const { colors } = useThemeColors();
+
   return (
-    <View style={[styles.activityCard, Shadows.card]}>
+    <View style={[styles.activityCard, Shadows.card, { backgroundColor: colors.primary + '14', borderColor: colors.divider }]}>
       <View style={styles.skeletonTopRow}>
         <SkeletonBlock style={styles.chip} />
         <SkeletonBlock style={styles.smallChip} />
@@ -26,8 +30,10 @@ export function ActivityCardSkeleton() {
 }
 
 export function ChatRowSkeleton() {
+  const { colors } = useThemeColors();
+
   return (
-    <View style={[styles.chatRow, Shadows.card]}>
+    <View style={[styles.chatRow, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
       <SkeletonBlock style={styles.avatar} />
       <View style={styles.chatTextWrap}>
         <SkeletonBlock style={styles.chatTitle} />
@@ -39,10 +45,12 @@ export function ChatRowSkeleton() {
 }
 
 export function MessageSkeleton() {
+  const { colors } = useThemeColors();
+
   return (
     <View style={styles.messageWrap}>
       <SkeletonBlock style={styles.messageAvatar} />
-      <View style={styles.messageTextWrap}>
+      <View style={[styles.messageTextWrap, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
         <SkeletonBlock style={styles.messageLineWide} />
         <SkeletonBlock style={styles.messageLine} />
       </View>
@@ -62,6 +70,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     marginHorizontal: Spacing.lg,
     overflow: 'hidden',
+    borderWidth: 1,
   },
   skeletonTopRow: {
     position: 'absolute',

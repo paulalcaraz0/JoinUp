@@ -8,6 +8,7 @@ import {
   TextStyle,
 } from 'react-native';
 import { Colors, Typography, BorderRadius, Spacing, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface PrimaryButtonProps {
   title: string;
@@ -28,10 +29,13 @@ export function PrimaryButton({
   textStyle,
   icon,
 }: PrimaryButtonProps) {
+  const { colors } = useThemeColors();
+
   return (
     <TouchableOpacity
       style={[
         styles.button,
+        { backgroundColor: colors.accent, shadowColor: colors.accent },
         disabled && styles.disabled,
         style,
       ]}
@@ -40,11 +44,11 @@ export function PrimaryButton({
       activeOpacity={0.85}
     >
       {loading ? (
-        <ActivityIndicator color={Colors.white} size="small" />
+        <ActivityIndicator color={colors.white} size="small" />
       ) : (
         <>
           {icon}
-          <Text style={[styles.text, textStyle]}>{title}</Text>
+          <Text style={[styles.text, { color: colors.white }, textStyle]}>{title}</Text>
         </>
       )}
     </TouchableOpacity>

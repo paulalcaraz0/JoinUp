@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Colors, Typography, Spacing, BorderRadius, Shadows, CategoryColors } from '../constants/theme';
 import { useActivities } from '../hooks/useActivities';
+import { useThemeColors } from '../hooks/useThemeColors';
 import { sendBuddyMessage } from '../lib/api/buddyService';
 import type { Activity, ActivityDraft, ActivityRecommendation, BuddyMessage } from '../types';
 
@@ -143,30 +144,32 @@ function DraftPreview({
   draft: ActivityDraft;
   onUseDraft: (draft: ActivityDraft) => void;
 }) {
+  const { colors } = useThemeColors();
+
   return (
-    <View style={styles.draftCard}>
+    <View style={[styles.draftCard, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
       <View style={styles.cardHeaderRow}>
-        <View style={styles.cardIcon}>
-          <Ionicons name="create-outline" size={16} color={Colors.accent} />
+        <View style={[styles.cardIcon, { backgroundColor: colors.accentSoft }]}>
+          <Ionicons name="create-outline" size={16} color={colors.accent} />
         </View>
-        <Text style={styles.cardHeaderText}>Activity draft</Text>
+        <Text style={[styles.cardHeaderText, { color: colors.accent }]}>Activity draft</Text>
       </View>
-      <Text style={styles.draftTitle}>{draft.title}</Text>
-      <Text style={styles.draftDescription}>{draft.description}</Text>
+      <Text style={[styles.draftTitle, { color: colors.text }]}>{draft.title}</Text>
+      <Text style={[styles.draftDescription, { color: colors.textSecondary }]}>{draft.description}</Text>
       <View style={styles.detailGrid}>
-        <Text style={styles.detailText}>{draft.category}</Text>
-        <Text style={styles.detailText}>{draft.location}</Text>
-        <Text style={styles.detailText}>{draft.date} at {draft.time}</Text>
-        <Text style={styles.detailText}>{draft.maxParticipants} people</Text>
+        <Text style={[styles.detailText, { color: colors.text }]}>{draft.category}</Text>
+        <Text style={[styles.detailText, { color: colors.text }]}>{draft.location}</Text>
+        <Text style={[styles.detailText, { color: colors.text }]}>{draft.date} at {draft.time}</Text>
+        <Text style={[styles.detailText, { color: colors.text }]}>{draft.maxParticipants} people</Text>
       </View>
       <View style={styles.draftActions}>
-        <TouchableOpacity style={styles.primarySmallButton} onPress={() => onUseDraft(draft)}>
+        <TouchableOpacity style={[styles.primarySmallButton, { backgroundColor: colors.accent }]} onPress={() => onUseDraft(draft)}>
           <Ionicons name="sparkles-outline" size={15} color={Colors.white} />
           <Text style={styles.primarySmallText}>Use this draft</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondarySmallButton} onPress={() => onUseDraft(draft)}>
-          <Ionicons name="pencil-outline" size={15} color={Colors.text} />
-          <Text style={styles.secondarySmallText}>Edit before posting</Text>
+        <TouchableOpacity style={[styles.secondarySmallButton, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]} onPress={() => onUseDraft(draft)}>
+          <Ionicons name="pencil-outline" size={15} color={colors.text} />
+          <Text style={[styles.secondarySmallText, { color: colors.text }]}>Edit before posting</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -180,10 +183,12 @@ function RecommendationList({
   recommendations: ActivityRecommendation[];
   onOpenActivity: (activityId: string) => void;
 }) {
+  const { colors } = useThemeColors();
+
   return (
     <View style={styles.recommendationList}>
       {recommendations.map((recommendation) => {
-        const chipColor = CategoryColors[recommendation.category] ?? Colors.accent;
+        const chipColor = CategoryColors[recommendation.category] ?? colors.accent;
         const dateLabel = recommendation.dateTime
           ? format(new Date(recommendation.dateTime), 'EEE, MMM d, h:mm a')
           : 'Soon';
@@ -191,7 +196,7 @@ function RecommendationList({
         return (
           <TouchableOpacity
             key={recommendation.activityId}
-            style={styles.recommendationCard}
+            style={[styles.recommendationCard, { backgroundColor: colors.surface, borderColor: colors.divider }]}
             activeOpacity={0.86}
             onPress={() => onOpenActivity(recommendation.activityId)}
           >
@@ -199,11 +204,11 @@ function RecommendationList({
               <View style={[styles.categoryPill, { backgroundColor: chipColor + '14', borderColor: chipColor }]}>
                 <Text style={[styles.categoryPillText, { color: chipColor }]}>{recommendation.category}</Text>
               </View>
-              <Text style={styles.slotsText}>{recommendation.availableSlots} left</Text>
+              <Text style={[styles.slotsText, { color: colors.slate }]}>{recommendation.availableSlots} left</Text>
             </View>
-            <Text style={styles.recommendationTitle}>{recommendation.title}</Text>
-            <Text style={styles.recommendationMeta}>{recommendation.location} · {dateLabel}</Text>
-            <Text style={styles.recommendationReason}>{recommendation.reason}</Text>
+            <Text style={[styles.recommendationTitle, { color: colors.text }]}>{recommendation.title}</Text>
+            <Text style={[styles.recommendationMeta, { color: colors.slate }]}>{recommendation.location} · {dateLabel}</Text>
+            <Text style={[styles.recommendationReason, { color: colors.textSecondary }]}>{recommendation.reason}</Text>
           </TouchableOpacity>
         );
       })}
@@ -220,17 +225,25 @@ function MessageBubble({
   onUseDraft: (draft: ActivityDraft) => void;
   onOpenActivity: (activityId: string) => void;
 }) {
+  const { colors } = useThemeColors();
   const isUser = message.role === 'user';
 
   return (
     <View style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowAssistant]}>
       {!isUser ? (
-        <View style={styles.buddyAvatar}>
+        <View style={[styles.buddyAvatar, { backgroundColor: colors.accent }]}>
           <Ionicons name="sparkles" size={15} color={Colors.white} />
         </View>
       ) : null}
-      <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-        <Text style={[styles.messageText, isUser ? styles.userMessageText : styles.assistantMessageText]}>
+      <View
+        style={[
+          styles.bubble,
+          isUser
+            ? [styles.userBubble, { backgroundColor: colors.primary }]
+            : [styles.assistantBubble, { backgroundColor: colors.surface, borderColor: colors.divider }],
+        ]}
+      >
+        <Text style={[styles.messageText, isUser ? styles.userMessageText : [styles.assistantMessageText, { color: colors.text }]]}>
           {message.text}
         </Text>
         {message.recommendations?.length ? (
@@ -245,6 +258,7 @@ function MessageBubble({
 export default function BuddyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
   const { activities } = useActivities();
   const [messages, setMessages] = useState<BuddyMessage[]>([createOpeningMessage()]);
   const [input, setInput] = useState('');
@@ -362,23 +376,23 @@ export default function BuddyScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
+      style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
     >
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color={Colors.text} />
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.divider }]}>
+        <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.mutedSurface }]} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleBlock}>
-          <Text style={styles.title}>Chat with JoinUp Buddy</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Chat with JoinUp Buddy</Text>
           <View style={styles.statusRow}>
             <View style={styles.onlineDot} />
             <Text style={styles.subtitle}>Online</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.headerButton}>
-          <Ionicons name="ellipsis-horizontal" size={22} color={Colors.text} />
+        <TouchableOpacity style={[styles.headerButton, { backgroundColor: colors.mutedSurface }]}>
+          <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -394,19 +408,19 @@ export default function BuddyScreen() {
         ListFooterComponent={
           isThinking ? (
             <View style={styles.thinkingRow}>
-              <View style={styles.buddyAvatar}>
+              <View style={[styles.buddyAvatar, { backgroundColor: colors.accent }]}>
                 <Ionicons name="sparkles" size={15} color={Colors.white} />
               </View>
-              <View style={styles.thinkingBubble}>
-                <ActivityIndicator size="small" color={Colors.accent} />
-                <Text style={styles.thinkingText}>Thinking...</Text>
+              <View style={[styles.thinkingBubble, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+                <ActivityIndicator size="small" color={colors.accent} />
+                <Text style={[styles.thinkingText, { color: colors.slate }]}>Thinking...</Text>
               </View>
             </View>
           ) : null
         }
       />
 
-      <View style={[styles.composerShell, { paddingBottom: Math.max(insets.bottom, Spacing.sm) }]}>
+      <View style={[styles.composerShell, { paddingBottom: Math.max(insets.bottom, Spacing.sm), backgroundColor: colors.surface, borderTopColor: colors.divider }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -416,28 +430,28 @@ export default function BuddyScreen() {
           {QUICK_PROMPTS.map((prompt) => (
             <TouchableOpacity
               key={prompt}
-              style={styles.quickPrompt}
+              style={[styles.quickPrompt, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}
               onPress={() => submitPrompt(prompt)}
               disabled={isThinking}
             >
-              <Text style={styles.quickPromptText}>{prompt}</Text>
+              <Text style={[styles.quickPromptText, { color: colors.text }]}>{prompt}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        <View style={styles.inputRow}>
+        <View style={[styles.inputRow, { backgroundColor: colors.cream, borderColor: colors.divider }]}>
           <TextInput
             value={input}
             onChangeText={setInput}
             placeholder="Type your message…"
-            placeholderTextColor={Colors.slate}
-            style={styles.input}
+            placeholderTextColor={colors.slate}
+            style={[styles.input, { color: colors.text }]}
             multiline
             maxLength={500}
             editable={!isThinking}
           />
           <TouchableOpacity
-            style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
+            style={[styles.sendButton, { backgroundColor: colors.accent }, !canSend && styles.sendButtonDisabled]}
             onPress={() => submitPrompt(input)}
             disabled={!canSend}
             activeOpacity={0.85}

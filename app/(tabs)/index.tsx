@@ -25,6 +25,7 @@ import { useActivities } from '../../hooks/useActivities';
 import { useAuthStore } from '../../store/authStore';
 import { notificationService } from '../../lib/api/notificationService';
 import { supabase } from '../../lib/supabase';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Activity } from '../../types';
 
 type FeedActivityRowProps = {
@@ -125,6 +126,7 @@ const FeedActivityRow = React.memo(function FeedActivityRow({
 export default function HomeFeedScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useThemeColors();
   const { activities, isLoading, error, joinActivity, joinStatuses, refetch } = useActivities();
   const user = useAuthStore((s) => s.user);
 
@@ -325,19 +327,22 @@ export default function HomeFeedScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.logo}>JoinUp</Text>
-          <Text style={styles.headerCaption}>Curated activities near you</Text>
+          <Text style={[styles.logo, { color: colors.primary }]}>JoinUp</Text>
+          <Text style={[styles.headerCaption, { color: colors.slate }]}>Curated activities near you</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
-            style={styles.iconBtn}
+            style={[
+              styles.iconBtn,
+              { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+            ]}
             onPress={() => router.push('/notifications')}
           >
-            <Ionicons name="notifications-outline" size={24} color={Colors.primary} />
+            <Ionicons name="notifications-outline" size={24} color={colors.primary} />
             <NotificationBadge count={unreadNotificationCount} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.avatar} onPress={() => router.push('/(tabs)/profile')}>
@@ -378,11 +383,15 @@ export default function HomeFeedScreen() {
           entering={FadeInDown.duration(220)}
           exiting={FadeOutUp.duration(180)}
           layout={LinearTransition.duration(180)}
-          style={[styles.greetingContainer, Shadows.card]}
+          style={[
+            styles.greetingContainer,
+            Shadows.card,
+            { backgroundColor: colors.primary },
+          ]}
         >
           <View style={styles.greetingTopRow}>
-            <View style={styles.greetingIcon}>
-              <Ionicons name="sparkles" size={18} color={Colors.accent} />
+            <View style={[styles.greetingIcon, { backgroundColor: isDark ? colors.surfaceElevated : colors.white }]}>
+              <Ionicons name="sparkles" size={18} color={colors.accent} />
             </View>
             <View style={styles.greetingTextBlock}>
               <Text style={styles.greetingKicker}>Today</Text>
@@ -402,6 +411,10 @@ export default function HomeFeedScreen() {
           style={[
             styles.categoryFilterBtn,
             selectedCategory !== 'All' && styles.categoryFilterBtnActive,
+            {
+              backgroundColor: selectedCategory !== 'All' ? colors.primary : colors.surfaceElevated,
+              borderColor: selectedCategory !== 'All' ? colors.primary : colors.divider,
+            },
           ]}
           onPress={() => setShowCategoryPicker((current) => !current)}
           activeOpacity={0.86}
@@ -409,21 +422,26 @@ export default function HomeFeedScreen() {
           <Ionicons
             name="options-outline"
             size={19}
-            color={selectedCategory !== 'All' ? Colors.white : Colors.primary}
+            color={selectedCategory !== 'All' ? colors.white : colors.primary}
           />
           {selectedCategory !== 'All' ? (
-            <Text style={styles.categoryFilterActiveText} numberOfLines={1}>
+            <Text style={[styles.categoryFilterActiveText, { color: colors.white }]} numberOfLines={1}>
               {selectedCategory}
             </Text>
           ) : null}
         </TouchableOpacity>
 
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={18} color={Colors.slate} />
+        <View
+          style={[
+            styles.searchContainer,
+            { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+          ]}
+        >
+          <Ionicons name="search-outline" size={18} color={colors.slate} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.text }]}
             placeholder="Search activities..."
-            placeholderTextColor={Colors.slate}
+            placeholderTextColor={colors.slate}
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
@@ -451,7 +469,10 @@ export default function HomeFeedScreen() {
         <Animated.View
           entering={FadeInDown.duration(160)}
           exiting={FadeOutUp.duration(120)}
-          style={styles.categoryPicker}
+          style={[
+            styles.categoryPicker,
+            { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+          ]}
         >
           {Categories.map((cat) => (
             <CategoryChip
@@ -521,7 +542,8 @@ export default function HomeFeedScreen() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                tintColor={Colors.accent}
+                tintColor={colors.accent}
+                colors={[colors.accent]}
               />
             }
           />
@@ -531,6 +553,7 @@ export default function HomeFeedScreen() {
       <TouchableOpacity
         style={[
           styles.buddyFloatingButton,
+          { backgroundColor: colors.surfaceElevated },
           { bottom: insets.bottom + Spacing.xl * 2 + 16 },
         ]}
         onPress={handleOpenBuddy}

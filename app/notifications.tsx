@@ -24,6 +24,7 @@ import { supabase } from '../lib/supabase';
 import { mapNotification } from '../lib/mappers/notification';
 import { notificationService } from '../lib/api/notificationService';
 import { useAuthStore } from '../store/authStore';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 const ICON_MAP: Record<string, { name: keyof typeof Ionicons.glyphMap; color: string }> = {
   join: { name: 'person-add', color: Colors.success },
@@ -48,6 +49,7 @@ const NotificationRow = React.memo(function NotificationRow({
   onDelete,
   isDeleting,
 }: NotificationRowProps) {
+  const { colors } = useThemeColors();
   const icon = ICON_MAP[item.type] ?? { name: 'notifications' as keyof typeof Ionicons.glyphMap, color: Colors.slate };
   const showActorAvatar = item.type === 'join' && Boolean(item.actorId);
   const actorInitial = (item.actorName || 'U').trim().charAt(0).toUpperCase();
@@ -68,7 +70,14 @@ const NotificationRow = React.memo(function NotificationRow({
 
   const row = (
       <TouchableOpacity
-        style={[styles.notifRow, !item.read && styles.notifRowUnread, isDeleting && styles.notifRowDeleting]}
+        style={[
+          styles.notifRow,
+          {
+            backgroundColor: item.read ? colors.surface : colors.accentSoft,
+            borderColor: item.read ? colors.divider : colors.accent + '33',
+          },
+          isDeleting && styles.notifRowDeleting,
+        ]}
         onPress={handlePress}
         activeOpacity={0.7}
         disabled={isDeleting}
@@ -77,7 +86,7 @@ const NotificationRow = React.memo(function NotificationRow({
           item.actorPhoto ? (
             <Image source={{ uri: item.actorPhoto }} style={styles.actorPhoto} resizeMode="cover" />
           ) : (
-            <View style={styles.actorFallback}>
+            <View style={[styles.actorFallback, { backgroundColor: colors.primary }]}>
               <Text style={styles.actorInitial}>{actorInitial}</Text>
             </View>
           )
@@ -87,11 +96,11 @@ const NotificationRow = React.memo(function NotificationRow({
           </View>
         )}
         <View style={styles.notifContent}>
-          <Text style={styles.notifTitle}>{item.title}</Text>
-          <Text style={styles.notifBody} numberOfLines={2}>
+          <Text style={[styles.notifTitle, { color: colors.text }]}>{item.title}</Text>
+          <Text style={[styles.notifBody, { color: colors.textSecondary }]} numberOfLines={2}>
             {bodyText}
           </Text>
-          <Text style={styles.notifTime}>{timeAgo}</Text>
+          <Text style={[styles.notifTime, { color: colors.slate }]}>{timeAgo}</Text>
         </View>
         {!item.read && <View style={styles.unreadDot} />}
       </TouchableOpacity>
@@ -127,6 +136,7 @@ const NotificationRow = React.memo(function NotificationRow({
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { colors } = useThemeColors();
   const user = useAuthStore((state) => state.user);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -314,7 +324,7 @@ export default function NotificationsScreen() {
         rightAction={
           unreadCount > 0 ? (
             <TouchableOpacity onPress={handleMarkAllRead}>
-              <Text style={styles.markRead}>Mark all read</Text>
+              <Text style={[styles.markRead, { color: colors.accent }]}>Mark all read</Text>
             </TouchableOpacity>
           ) : undefined
         }
@@ -322,7 +332,7 @@ export default function NotificationsScreen() {
 
       {isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : error && notifications.length === 0 ? (
         <EmptyState
@@ -361,10 +371,10 @@ export default function NotificationsScreen() {
             ItemSeparatorComponent={renderSeparator}
           />
           {undoNotification ? (
-            <View style={styles.undoBar}>
+            <View style={[styles.undoBar, { backgroundColor: colors.text }]}>
               <Text style={styles.undoText} numberOfLines={1}>Notification deleted</Text>
-              <TouchableOpacity onPress={handleUndoDelete} style={styles.undoBtn}>
-                <Text style={styles.undoBtnText}>Undo</Text>
+              <TouchableOpacity onPress={handleUndoDelete} style={[styles.undoBtn, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.undoBtnText, { color: colors.text }]}>Undo</Text>
               </TouchableOpacity>
             </View>
           ) : null}

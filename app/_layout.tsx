@@ -13,6 +13,8 @@ import { useAuthStore } from '../store/authStore';
 import { supabase } from '../lib/supabase';
 import { InAppNotificationBanner } from '../components/ui/InAppNotificationBanner';
 import { Colors } from '../constants/theme';
+import { useThemeStore } from '../store/themeStore';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -27,12 +29,19 @@ export default function RootLayout() {
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isLoading, user } = useAuthStore();
+  const hydrateTheme = useThemeStore((state) => state.hydrate);
+  const isThemeHydrated = useThemeStore((state) => state.isHydrated);
+  const { colors, isDark } = useThemeColors();
   const [authBootstrapped, setAuthBootstrapped] = useState(false);
   const [bannerNotification, setBannerNotification] = useState<{
     id: string;
     title: string;
     body: string;
   } | null>(null);
+
+  useEffect(() => {
+    void hydrateTheme();
+  }, [hydrateTheme]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -134,11 +143,11 @@ export default function RootLayout() {
     };
   }, [user?.uid]);
 
-  if (!fontsLoaded || !authBootstrapped) {
+  if (!fontsLoaded || !authBootstrapped || !isThemeHydrated) {
     return (
-      <View style={styles.bootContainer}>
+      <View style={[styles.bootContainer, { backgroundColor: colors.primary }]}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color={Colors.accent} />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -147,7 +156,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <StatusBar barStyle="light-content" />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.cream} />
           <InAppNotificationBanner
             notification={bannerNotification}
             onHidden={() => setBannerNotification(null)}

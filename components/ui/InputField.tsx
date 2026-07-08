@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Colors, Typography, BorderRadius, Spacing } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface InputFieldProps extends TextInputProps {
   label: string;
@@ -25,6 +26,7 @@ export function InputField({
   ...props
 }: InputFieldProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const { colors } = useThemeColors();
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -36,15 +38,20 @@ export function InputField({
             rightAccessory ? styles.inputWithAccessory : null,
             isFocused && styles.inputFocused,
             error ? styles.inputError : null,
+            {
+              backgroundColor: isFocused ? colors.surfaceElevated : colors.surface,
+              borderColor: error ? colors.danger : isFocused ? colors.accent : colors.divider,
+              color: colors.text,
+            },
           ]}
-          placeholderTextColor={Colors.slate}
+          placeholderTextColor={colors.slate}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           {...props}
         />
         {rightAccessory ? <View style={styles.accessoryWrap}>{rightAccessory}</View> : null}
       </View>
-      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {error ? <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text> : null}
     </View>
   );
 }

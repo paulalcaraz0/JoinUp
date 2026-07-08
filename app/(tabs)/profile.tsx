@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Switch,
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +27,8 @@ import { supabase } from '../../lib/supabase';
 import { InputLimits, trimInput } from '../../lib/validation';
 import { signOutAndResetSession } from '../../hooks/useAuth';
 import { useActivities } from '../../hooks/useActivities';
+import { useThemeStore } from '../../store/themeStore';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { JoinRequestStatus } from '../../types';
 
 type ProfileTab = 'Joined' | 'Hosting' | 'Past';
@@ -78,6 +81,8 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useThemeColors();
+  const toggleThemeMode = useThemeStore((state) => state.toggleMode);
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const { activities, joinStatuses, joinedActivityIds, deleteRejectedJoin, canAccessChat } = useActivities();
@@ -536,7 +541,7 @@ export default function ProfileScreen() {
   const avatarInitial = (user?.displayName || 'U').trim().charAt(0).toUpperCase();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.profileHeader}>
@@ -583,40 +588,43 @@ export default function ProfileScreen() {
               )}
             </View>
           </TouchableOpacity>
-          <Text style={styles.displayName}>
+          <Text style={[styles.displayName, { color: colors.text }]}>
             {user?.displayName ?? 'User'}
           </Text>
-          <Text style={styles.location}>{user?.location || 'No location set'}</Text>
-          <Text style={styles.memberSince}>Member since {memberSince}</Text>
+          <Text style={[styles.location, { color: colors.slate }]}>{user?.location || 'No location set'}</Text>
+          <Text style={[styles.memberSince, { color: colors.textSecondary }]}>Member since {memberSince}</Text>
           <TouchableOpacity
-            style={styles.editBtn}
+            style={[
+              styles.editBtn,
+              { backgroundColor: colors.surface, borderColor: colors.divider },
+            ]}
             onPress={() => setShowEditSheet(true)}
           >
-            <Text style={styles.editBtnText}>Edit Profile</Text>
+            <Text style={[styles.editBtnText, { color: colors.text }]}>Edit Profile</Text>
           </TouchableOpacity>
         </View>
 
         {/* Stats */}
-        <View style={styles.statsRow}>
+        <View style={[styles.statsRow, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}>
           {stats.map((stat) => (
             <View key={stat.label} style={styles.statItem}>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+              <Text style={[styles.statValue, { color: colors.text }]}>{stat.value}</Text>
+              <Text style={[styles.statLabel, { color: colors.slate }]}>{stat.label}</Text>
             </View>
           ))}
         </View>
 
         {/* Bio */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Bio</Text>
-          <Text style={styles.bioText}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Bio</Text>
+          <Text style={[styles.bioText, { color: colors.text }]}>
             {user?.bio ?? 'No bio yet.'}
           </Text>
         </View>
 
         {/* Interests */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Interests</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Interests</Text>
           <View style={styles.chipsRow}>
             {(user?.interests ?? []).map((interest) => (
               <CategoryChip
@@ -631,17 +639,22 @@ export default function ProfileScreen() {
         </View>
 
         {/* Tabs */}
-        <View style={styles.tabRow}>
+        <View style={[styles.tabRow, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}>
           {(['Joined', 'Hosting', 'Past'] as ProfileTab[]).map((tab) => (
             <TouchableOpacity
               key={tab}
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              style={[
+                styles.tab,
+                activeTab === tab && styles.tabActive,
+                activeTab === tab && { backgroundColor: colors.primary },
+              ]}
               onPress={() => setActiveTab(tab)}
             >
               <Text
                 style={[
                   styles.tabText,
                   activeTab === tab && styles.tabTextActive,
+                  { color: activeTab === tab ? colors.white : colors.slate },
                 ]}
               >
                 {tab}
@@ -665,7 +678,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           ) : getTabActivities().length === 0 ? (
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyText, { color: colors.slate }]}>
               No {activeTab.toLowerCase()} activities yet.
             </Text>
           ) : (
@@ -685,7 +698,11 @@ export default function ProfileScreen() {
                   entering={FadeInDown.delay(index * 50).springify()}
                 >
                   <TouchableOpacity
-                    style={[styles.miniCard, Shadows.card]}
+                    style={[
+                      styles.miniCard,
+                      Shadows.card,
+                      { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+                    ]}
                     onPress={() => {
                       void handleOpenHistoryActivity(activity.id);
                     }}
@@ -701,10 +718,10 @@ export default function ProfileScreen() {
                         <Ionicons name="image-outline" size={24} color={chipColor} />
                       )}
                     </View>
-                    <Text style={styles.miniCardTitle} numberOfLines={2}>
+                    <Text style={[styles.miniCardTitle, { color: colors.text }]} numberOfLines={2}>
                       {activity.title}
                     </Text>
-                    <Text style={styles.miniCardMeta} numberOfLines={2}>
+                    <Text style={[styles.miniCardMeta, { color: colors.slate }]} numberOfLines={2}>
                       {activity.locationName}
                     </Text>
                     {isJoinedTab && joinStatus ? (
@@ -810,13 +827,45 @@ export default function ProfileScreen() {
           ]}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.sheetTitle}>Account settings</Text>
-          <Text style={styles.settingsSubtitle}>
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Account settings</Text>
+          <Text style={[styles.settingsSubtitle, { color: colors.slate }]}>
             Manage how this device signs into JoinUp.
           </Text>
 
           <TouchableOpacity
-            style={styles.settingsAction}
+            style={[
+              styles.settingsAction,
+              { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+            ]}
+            onPress={() => {
+              void toggleThemeMode();
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.settingsIconWrap, styles.settingsIconAccent]}>
+              <Ionicons name={isDark ? 'moon' : 'sunny-outline'} size={20} color={colors.accent} />
+            </View>
+            <View style={styles.settingsActionTextWrap}>
+              <Text style={[styles.settingsActionTitle, { color: colors.text }]}>Dark mode</Text>
+              <Text style={[styles.settingsActionSubtitle, { color: colors.slate }]}>
+                Switch this device between light and dark UI.
+              </Text>
+            </View>
+            <Switch
+              value={isDark}
+              onValueChange={() => {
+                void toggleThemeMode();
+              }}
+              trackColor={{ false: colors.divider, true: colors.accent + '66' }}
+              thumbColor={isDark ? colors.accent : colors.white}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.settingsAction,
+              { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+            ]}
             onPress={() => handleAuthAction('switch')}
             activeOpacity={0.85}
             disabled={authActionLoading !== null}
@@ -825,8 +874,8 @@ export default function ProfileScreen() {
               <Ionicons name="swap-horizontal" size={20} color={Colors.accent} />
             </View>
             <View style={styles.settingsActionTextWrap}>
-              <Text style={styles.settingsActionTitle}>Switch account</Text>
-              <Text style={styles.settingsActionSubtitle}>
+              <Text style={[styles.settingsActionTitle, { color: colors.text }]}>Switch account</Text>
+              <Text style={[styles.settingsActionSubtitle, { color: colors.slate }]}>
                 Sign out and jump straight to sign in.
               </Text>
             </View>
@@ -838,7 +887,10 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.settingsAction}
+            style={[
+              styles.settingsAction,
+              { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+            ]}
             onPress={() => handleAuthAction('logout')}
             activeOpacity={0.85}
             disabled={authActionLoading !== null}
@@ -847,8 +899,8 @@ export default function ProfileScreen() {
               <Ionicons name="log-out-outline" size={20} color={Colors.error} />
             </View>
             <View style={styles.settingsActionTextWrap}>
-              <Text style={styles.settingsActionTitle}>Log out</Text>
-              <Text style={styles.settingsActionSubtitle}>
+              <Text style={[styles.settingsActionTitle, { color: colors.text }]}>Log out</Text>
+              <Text style={[styles.settingsActionSubtitle, { color: colors.slate }]}>
                 End this session and return to the welcome screen.
               </Text>
             </View>
@@ -860,7 +912,10 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.settingsAction}
+            style={[
+              styles.settingsAction,
+              { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+            ]}
             onPress={handleDeleteAccount}
             activeOpacity={0.85}
             disabled={authActionLoading !== null}
@@ -870,7 +925,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.settingsActionTextWrap}>
               <Text style={[styles.settingsActionTitle, styles.settingsActionTitleDanger]}>Delete account</Text>
-              <Text style={styles.settingsActionSubtitle}>
+              <Text style={[styles.settingsActionSubtitle, { color: colors.slate }]}>
                 Permanently remove your account and all associated data.
               </Text>
             </View>

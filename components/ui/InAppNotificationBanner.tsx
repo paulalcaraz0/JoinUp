@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 type BannerPayload = {
   id: string;
@@ -16,6 +17,7 @@ interface InAppNotificationBannerProps {
 
 export function InAppNotificationBanner({ notification, onHidden }: InAppNotificationBannerProps) {
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
   const shouldUseNativeDriver = Platform.OS !== 'web';
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-16)).current;
@@ -75,7 +77,7 @@ export function InAppNotificationBanner({ notification, onHidden }: InAppNotific
         },
       ]}
     >
-      <View style={[styles.card, Shadows.card]}>
+      <View style={[styles.card, Shadows.card, { backgroundColor: colors.primary, borderColor: colors.white + '22' }]}>
         <Text style={styles.title} numberOfLines={1}>{notification.title}</Text>
         <Text style={styles.body} numberOfLines={2}>{notification.body}</Text>
       </View>

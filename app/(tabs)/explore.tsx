@@ -26,6 +26,7 @@ import { CategoryChip } from '../../components/ui/CategoryChip';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useActivities } from '../../hooks/useActivities';
 import { useUsers } from '../../hooks/useUsers';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Activity, User } from '../../types';
 import { format } from 'date-fns';
 
@@ -108,6 +109,7 @@ function applyDiscoveryFilter<T extends { dateTime: string; maxSlots: number; cu
 export default function ExploreScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useThemeColors();
   const {
     activities,
     isLoading: activitiesLoading,
@@ -204,7 +206,7 @@ export default function ExploreScreen() {
       return (
         <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
         <TouchableOpacity
-          style={[styles.exploreCard, Shadows.card]}
+          style={[styles.exploreCard, Shadows.card, { backgroundColor: colors.primary }]}
           onPress={() => router.push(`/activity/${item.id}`)}
           activeOpacity={0.92}
         >
@@ -250,8 +252,8 @@ export default function ExploreScreen() {
 
             <View style={styles.cardFooterRow}>
               <View style={styles.exploreCardCta}>
-                <Text style={styles.exploreCardCtaText}>VIEW</Text>
-                <Ionicons name="eye-outline" size={13} color={Colors.primary} />
+                <Text style={[styles.exploreCardCtaText, { color: colors.primary }]}>VIEW</Text>
+                <Ionicons name="eye-outline" size={13} color={colors.primary} />
               </View>
               <View style={[styles.exploreCategoryPill, { backgroundColor: chipColor + '24' }]}>
                 <Text style={styles.exploreCategoryText}>{item.category}</Text>
@@ -262,7 +264,7 @@ export default function ExploreScreen() {
         </Animated.View>
       );
     },
-    [router]
+    [colors, router]
   );
 
   const renderUserItem = useCallback(
@@ -273,7 +275,11 @@ export default function ExploreScreen() {
       return (
         <Animated.View entering={FadeInDown.delay(index * 80).springify()}>
           <TouchableOpacity
-            style={[styles.userCard, Shadows.card]}
+            style={[
+              styles.userCard,
+              Shadows.card,
+              { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+            ]}
             onPress={() => router.push(`/users/${profile.uid}`)}
             activeOpacity={0.92}
           >
@@ -301,7 +307,7 @@ export default function ExploreScreen() {
             <View style={styles.userDetailsPanel}>
               <View style={styles.userTopLine}>
                 <View style={styles.userTitleBlock}>
-                  <Text style={styles.userName} numberOfLines={1}>
+                  <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>
                     {profile.displayName || 'Anonymous'}
                   </Text>
                   <Text style={styles.userPrimaryInterest} numberOfLines={1}>
@@ -324,33 +330,33 @@ export default function ExploreScreen() {
                   </View>
                 ) : null}
                 {profile.location ? (
-                  <View style={styles.userMetaPill}>
-                    <Ionicons name="location-outline" size={12} color={Colors.slate} />
-                    <Text style={styles.userMetaText} numberOfLines={1}>
+                  <View style={[styles.userMetaPill, { backgroundColor: colors.cream }]}>
+                    <Ionicons name="location-outline" size={12} color={colors.slate} />
+                    <Text style={[styles.userMetaText, { color: colors.textSecondary }]} numberOfLines={1}>
                       {profile.location}
                     </Text>
                   </View>
                 ) : null}
-                <View style={styles.userMetaPill}>
-                  <Ionicons name="person-outline" size={12} color={Colors.slate} />
-                  <Text style={styles.userMetaText}>{profile.ageRange}</Text>
+                <View style={[styles.userMetaPill, { backgroundColor: colors.cream }]}>
+                  <Ionicons name="person-outline" size={12} color={colors.slate} />
+                  <Text style={[styles.userMetaText, { color: colors.textSecondary }]}>{profile.ageRange}</Text>
                 </View>
               </View>
 
-              <Text style={styles.userBio} numberOfLines={1}>
+              <Text style={[styles.userBio, { color: colors.textSecondary }]} numberOfLines={1}>
                 {profile.bio || 'Ready to discover activities on JoinUp.'}
               </Text>
 
               <View style={styles.userFooter}>
                 <View style={styles.joinedMiniStat}>
-                  <Ionicons name="calendar-outline" size={13} color={Colors.slate} />
-                  <Text style={styles.joinedMiniText}>
+                  <Ionicons name="calendar-outline" size={13} color={colors.slate} />
+                  <Text style={[styles.joinedMiniText, { color: colors.slate }]}>
                     {profile.activitiesJoined.length} joined
                   </Text>
                 </View>
-                <View style={styles.viewProfilePill}>
-                  <Text style={styles.viewProfileText}>View</Text>
-                  <Ionicons name="chevron-forward" size={14} color={Colors.primary} />
+                <View style={[styles.viewProfilePill, { backgroundColor: colors.cream, borderColor: colors.divider }]}>
+                  <Text style={[styles.viewProfileText, { color: colors.primary }]}>View</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.primary} />
                 </View>
               </View>
             </View>
@@ -358,7 +364,7 @@ export default function ExploreScreen() {
         </Animated.View>
       );
     },
-    [router]
+    [colors, router]
   );
 
   const handleEventScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -379,50 +385,57 @@ export default function ExploreScreen() {
   const renderPeopleDiscoveryHeader = useCallback(
     () => (
       <View style={styles.peopleDiscoveryHeader}>
-        <View style={[styles.searchContainer, styles.searchStandalone, styles.peopleSearchContainer]}>
-          <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
+        <View
+          style={[
+            styles.searchContainer,
+            styles.searchStandalone,
+            styles.peopleSearchContainer,
+            { backgroundColor: colors.surfaceElevated, borderColor: colors.divider },
+          ]}
+        >
+          <Ionicons name="search-outline" size={18} color={colors.slate} style={styles.searchIcon} />
           <TextInput
-            style={[styles.searchInput, styles.peopleSearchInput]}
+            style={[styles.searchInput, styles.peopleSearchInput, { color: colors.text }]}
             placeholder="Search by name or interests"
-            placeholderTextColor={Colors.slate}
+            placeholderTextColor={colors.slate}
             value={userSearchQuery}
             onChangeText={setUserSearchQuery}
           />
           {userSearchQuery ? (
             <TouchableOpacity onPress={() => setUserSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color={Colors.slate} />
+              <Ionicons name="close-circle" size={18} color={colors.slate} />
             </TouchableOpacity>
           ) : null}
         </View>
 
         <LinearGradient
-          colors={[Colors.white, Colors.surfaceElevated]}
+          colors={[colors.surfaceElevated, isDark ? colors.surface : colors.surfaceElevated]}
           style={styles.peopleHeader}
         >
           <View>
-            <Text style={styles.sectionTitleNoMargin}>Discover People</Text>
-            <Text style={styles.peopleSubtitle}>
+            <Text style={[styles.sectionTitleNoMargin, { color: colors.text }]}>Discover People</Text>
+            <Text style={[styles.peopleSubtitle, { color: colors.textSecondary }]}>
               {peopleSummary.userCount} {peopleSummary.userCount === 1 ? 'member' : 'members'} ready to join activities
             </Text>
           </View>
-          <View style={styles.peopleHeaderIcon}>
-            <Ionicons name="people" size={20} color={Colors.primary} />
+          <View style={[styles.peopleHeaderIcon, { backgroundColor: colors.accentSoft, borderColor: colors.accent + '20' }]}>
+            <Ionicons name="people" size={20} color={colors.primary} />
           </View>
         </LinearGradient>
 
         {peopleSummary.topInterests.length > 0 ? (
           <View style={styles.trendingRow}>
-            <Text style={styles.trendingLabel}>Popular</Text>
+            <Text style={[styles.trendingLabel, { color: colors.slate }]}>Popular</Text>
             {peopleSummary.topInterests.map((interest) => (
-              <View key={interest} style={styles.trendingChip}>
-                <Text style={styles.trendingChipText}>{interest}</Text>
+              <View key={interest} style={[styles.trendingChip, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}>
+                <Text style={[styles.trendingChipText, { color: colors.accent }]}>{interest}</Text>
               </View>
             ))}
           </View>
         ) : null}
       </View>
     ),
-    [peopleSummary, userSearchQuery]
+    [colors, isDark, peopleSummary, userSearchQuery]
   );
 
   const handlePeopleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -441,21 +454,21 @@ export default function ExploreScreen() {
   }, []);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
       {/* Header */}
       <NavBar
         title="Explore"
         showBack
         rightAction={
-          <TouchableOpacity style={styles.filterBtn}>
-            <Ionicons name="filter-outline" size={22} color={Colors.text} />
+          <TouchableOpacity style={[styles.filterBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}>
+            <Ionicons name="filter-outline" size={22} color={colors.text} />
           </TouchableOpacity>
         }
       />
 
-      <View style={styles.tabsContainer}>
+      <View style={[styles.tabsContainer, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}>
         <TouchableOpacity
-          style={[styles.tab, viewMode === 'events' && styles.tabActive]}
+          style={[styles.tab, viewMode === 'events' && styles.tabActive, viewMode === 'events' && { backgroundColor: colors.primary }]}
           onPress={() => {
             setShowPlaceDropdown(false);
             setShowEventDiscovery(true);
@@ -463,10 +476,10 @@ export default function ExploreScreen() {
             setViewMode('events');
           }}
         >
-          <Text style={[styles.tabText, viewMode === 'events' && styles.tabTextActive]}>Events</Text>
+          <Text style={[styles.tabText, viewMode === 'events' && styles.tabTextActive, { color: viewMode === 'events' ? colors.white : colors.slate }]}>Events</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, viewMode === 'users' && styles.tabActive]}
+          style={[styles.tab, viewMode === 'users' && styles.tabActive, viewMode === 'users' && { backgroundColor: colors.primary }]}
           onPress={() => {
             setShowPlaceDropdown(false);
             setShowPeopleDiscovery(true);
@@ -474,7 +487,7 @@ export default function ExploreScreen() {
             setViewMode('users');
           }}
         >
-          <Text style={[styles.tabText, viewMode === 'users' && styles.tabTextActive]}>Users</Text>
+          <Text style={[styles.tabText, viewMode === 'users' && styles.tabTextActive, { color: viewMode === 'users' ? colors.white : colors.slate }]}>Users</Text>
         </TouchableOpacity>
       </View>
 
@@ -493,48 +506,55 @@ export default function ExploreScreen() {
         >
           <View style={styles.eventSearchWrap}>
             <View style={styles.eventSearchRow}>
-              <View style={[styles.searchContainer, styles.searchInline]}>
-                <Ionicons name="search-outline" size={18} color={Colors.slate} style={styles.searchIcon} />
+              <View style={[styles.searchContainer, styles.searchInline, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}>
+                <Ionicons name="search-outline" size={18} color={colors.slate} style={styles.searchIcon} />
                 <TextInput
-                  style={styles.searchInput}
+                  style={[styles.searchInput, { color: colors.text }]}
                   placeholder="Search events by title or location"
-                  placeholderTextColor={Colors.slate}
+                  placeholderTextColor={colors.slate}
                   value={eventSearchQuery}
                   onChangeText={setEventSearchQuery}
                 />
                 {eventSearchQuery ? (
                   <TouchableOpacity onPress={() => setEventSearchQuery('')}>
-                    <Ionicons name="close-circle" size={18} color={Colors.slate} />
+                    <Ionicons name="close-circle" size={18} color={colors.slate} />
                   </TouchableOpacity>
                 ) : null}
               </View>
               <TouchableOpacity
-                style={[styles.locationFilterButton, showPlaceDropdown && styles.locationFilterButtonActive]}
+                style={[
+                  styles.locationFilterButton,
+                  showPlaceDropdown && styles.locationFilterButtonActive,
+                  {
+                    backgroundColor: showPlaceDropdown ? colors.primary : colors.surfaceElevated,
+                    borderColor: showPlaceDropdown ? colors.primary : colors.divider,
+                  },
+                ]}
                 activeOpacity={0.85}
                 onPress={() => setShowPlaceDropdown((prev) => !prev)}
               >
                 <Ionicons
                   name="options-outline"
                   size={20}
-                  color={showPlaceDropdown ? Colors.white : Colors.primary}
+                  color={showPlaceDropdown ? colors.white : colors.primary}
                 />
               </TouchableOpacity>
             </View>
 
             {showPlaceDropdown ? (
-              <View style={[styles.placeDropdown, Shadows.card]}>
+              <View style={[styles.placeDropdown, Shadows.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.divider }]}>
                 {PHILIPPINE_PLACES.map((place) => {
                   const active = place.label === selectedPlace;
                   return (
                     <TouchableOpacity
                       key={place.label}
-                      style={[styles.placeItem, active && styles.placeItemActive]}
+                      style={[styles.placeItem, active && styles.placeItemActive, active && { backgroundColor: colors.accentSoft }]}
                       onPress={() => {
                         setSelectedPlace(place.label);
                         setShowPlaceDropdown(false);
                       }}
                     >
-                      <Text style={[styles.placeItemText, active && styles.placeItemTextActive]}>{place.label}</Text>
+                      <Text style={[styles.placeItemText, { color: active ? colors.accent : colors.text }, active && styles.placeItemTextActive]}>{place.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -560,6 +580,10 @@ export default function ExploreScreen() {
               style={[
                 styles.locationPill,
                 selectedPlace !== 'All Philippines' && styles.locationPillActive,
+                {
+                  backgroundColor: selectedPlace !== 'All Philippines' ? colors.primary : colors.surfaceElevated,
+                  borderColor: selectedPlace !== 'All Philippines' ? colors.primary : colors.divider,
+                },
               ]}
               activeOpacity={0.85}
               onPress={() => setShowPlaceDropdown((prev) => !prev)}
@@ -567,12 +591,13 @@ export default function ExploreScreen() {
               <Ionicons
                 name="location"
                 size={15}
-                color={selectedPlace !== 'All Philippines' ? Colors.white : Colors.success}
+                color={selectedPlace !== 'All Philippines' ? colors.white : colors.success}
               />
               <Text
                 style={[
                   styles.locationText,
                   selectedPlace !== 'All Philippines' && styles.locationTextActive,
+                  { color: selectedPlace !== 'All Philippines' ? colors.white : colors.text },
                 ]}
                 numberOfLines={1}
               >
@@ -596,10 +621,10 @@ export default function ExploreScreen() {
 
       {viewMode === 'events' ? (
         <View style={styles.listShell}>
-          <Text style={styles.sectionTitle}>Happening Near You</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Happening Near You</Text>
 
           {activitiesLoading && activities.length === 0 ? (
-            <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+            <ActivityIndicator size="large" color={colors.accent} style={styles.loader} />
           ) : activitiesError && activities.length === 0 ? (
             <EmptyState
               icon="alert-circle-outline"
@@ -657,7 +682,7 @@ export default function ExploreScreen() {
 
           {usersLoading && users.length === 0 ? (
             <>
-              <ActivityIndicator size="large" color={Colors.accent} style={styles.loader} />
+              <ActivityIndicator size="large" color={colors.accent} style={styles.loader} />
             </>
           ) : usersError && users.length === 0 ? (
             <>

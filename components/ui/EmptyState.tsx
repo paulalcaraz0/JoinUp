@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, type StyleProp, type ViewStyle } from 'react-native';
 import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface EmptyStateProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -20,15 +21,17 @@ export function EmptyState({
   onAction,
   style,
 }: EmptyStateProps) {
+  const { colors } = useThemeColors();
+
   return (
     <View style={[styles.container, style]}>
-      <View style={styles.iconWrap}>
-        <Ionicons name={icon} size={34} color={Colors.accent} />
+      <View style={[styles.iconWrap, { backgroundColor: colors.accentSoft, borderColor: colors.divider }]}>
+        <Ionicons name={icon} size={34} color={colors.accent} />
       </View>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+      <Text style={[styles.message, { color: colors.slate }]}>{message}</Text>
       {actionLabel && onAction ? (
-        <TouchableOpacity style={styles.actionBtn} onPress={onAction} activeOpacity={0.85}>
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.accent }]} onPress={onAction} activeOpacity={0.85}>
           <Text style={styles.actionText}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
@@ -52,6 +55,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.accentSoft,
+    borderWidth: 1,
+    borderColor: Colors.divider,
     marginBottom: Spacing.md,
   },
   title: {

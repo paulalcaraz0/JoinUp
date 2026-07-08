@@ -24,6 +24,7 @@ import { BottomSheet } from '../../../components/ui/BottomSheet';
 import { EmptyState } from '../../../components/ui/EmptyState';
 import { NavBar } from '../../../components/layout/NavBar';
 import { useActivities } from '../../../hooks/useActivities';
+import { useThemeColors } from '../../../hooks/useThemeColors';
 import { useAuthStore } from '../../../store/authStore';
 import { supabase } from '../../../lib/supabase';
 import type { AvatarStackItem } from '../../../components/ui/AvatarStack';
@@ -33,6 +34,7 @@ export default function ActivityDetailScreen() {
   const id = rawId ? rawId.toString().trim() : '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
   const galleryWidth = Dimensions.get('window').width - Spacing.lg * 2;
   const {
     activities,
@@ -121,10 +123,10 @@ export default function ActivityDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
         <NavBar title="Activity" showBack />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors.accent} />
+          <ActivityIndicator size="large" color={colors.accent} />
         </View>
       </View>
     );
@@ -132,7 +134,7 @@ export default function ActivityDetailScreen() {
 
   if (!activity) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
         <NavBar title="Activity" showBack />
         <EmptyState
           icon={error ? 'alert-circle-outline' : 'calendar-outline'}
@@ -204,7 +206,7 @@ export default function ActivityDetailScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}
@@ -241,8 +243,8 @@ export default function ActivityDetailScreen() {
                 ))}
               </ScrollView>
             ) : (
-              <View style={styles.coverPlaceholder}>
-                <Ionicons name="image-outline" size={48} color={Colors.slate} />
+              <View style={[styles.coverPlaceholder, { backgroundColor: colors.mutedSurface }]}>
+                <Ionicons name="image-outline" size={48} color={colors.slate} />
               </View>
             )}
             {galleryImages.length > 1 && (
@@ -306,26 +308,26 @@ export default function ActivityDetailScreen() {
 
         {/* Title */}
         <Animated.View entering={FadeInDown.delay(150).springify()} style={styles.titleSection}>
-          <Text style={styles.title}>{activity.title}</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{activity.title}</Text>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
-              <Ionicons name="star" size={15} color={Colors.text} />
-              <Text style={styles.summaryText}>
+              <Ionicons name="star" size={15} color={colors.text} />
+              <Text style={[styles.summaryText, { color: colors.text }]}>
                 {activity.reactions.like + activity.reactions.heart + activity.reactions.fire > 0
                   ? `${activity.reactions.like + activity.reactions.heart + activity.reactions.fire} reactions`
                   : 'New activity'}
               </Text>
             </View>
-            <Text style={styles.summaryDot}>-</Text>
-            <Text style={styles.summaryText}>{joined}/{activity.maxSlots} going</Text>
+            <Text style={[styles.summaryDot, { color: colors.slate }]}>-</Text>
+            <Text style={[styles.summaryText, { color: colors.text }]}>{joined}/{activity.maxSlots} going</Text>
           </View>
         </Animated.View>
 
         {/* Host info */}
-        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.hostCard}>
+        <Animated.View entering={FadeInDown.delay(200).springify()} style={[styles.hostCard, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
           <View>
-            <Text style={styles.hostCardTitle}>{activity.category} activity</Text>
-            <Text style={styles.hostText}>Hosted by {activity.hostName || 'Host'}</Text>
+            <Text style={[styles.hostCardTitle, { color: colors.text }]}>{activity.category} activity</Text>
+            <Text style={[styles.hostText, { color: colors.slate }]}>Hosted by {activity.hostName || 'Host'}</Text>
           </View>
           <View style={styles.hostAvatar}>
             {activity.hostPhoto ? (
@@ -339,36 +341,36 @@ export default function ActivityDetailScreen() {
         {/* Date and location */}
         <Animated.View entering={FadeInDown.delay(250).springify()} style={styles.infoSection}>
           <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Ionicons name="calendar-outline" size={20} color={Colors.accent} />
+            <View style={[styles.infoIcon, { backgroundColor: colors.accentSoft }]}>
+              <Ionicons name="calendar-outline" size={20} color={colors.accent} />
             </View>
             <View style={styles.infoTextBlock}>
-              <Text style={styles.infoLabel}>Date & Time</Text>
-              <Text style={styles.infoValue}>{dateStr}</Text>
+              <Text style={[styles.infoLabel, { color: colors.slate }]}>Date & Time</Text>
+              <Text style={[styles.infoValue, { color: colors.text }]}>{dateStr}</Text>
             </View>
           </View>
           <View style={styles.infoRow}>
-            <View style={styles.infoIcon}>
-              <Ionicons name="location-outline" size={20} color={Colors.accent} />
+            <View style={[styles.infoIcon, { backgroundColor: colors.accentSoft }]}>
+              <Ionicons name="location-outline" size={20} color={colors.accent} />
             </View>
             <View style={styles.infoTextBlock}>
-              <Text style={styles.infoLabel}>Location</Text>
-              <Text style={styles.infoValue}>{activity.location.name}</Text>
+              <Text style={[styles.infoLabel, { color: colors.slate }]}>Location</Text>
+              <Text style={[styles.infoValue, { color: colors.text }]}>{activity.location.name}</Text>
             </View>
           </View>
         </Animated.View>
 
         <Animated.View entering={FadeInDown.delay(300).springify()} style={styles.amenitiesSection}>
-          <Text style={styles.sectionTitle}>Activity info</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Activity info</Text>
           <View style={styles.amenitiesList}>
             <View style={[styles.amenityPill, { backgroundColor: chipColor + '14' }]}>
               <Text style={[styles.amenityText, { color: chipColor }]}>{activity.category}</Text>
             </View>
-            <View style={styles.amenityPill}>
-              <Text style={styles.amenityText}>{activity.requiresApproval ? 'Approval required' : 'Instant join'}</Text>
+            <View style={[styles.amenityPill, { backgroundColor: colors.mutedSurface }]}>
+              <Text style={[styles.amenityText, { color: colors.textSecondary }]}>{activity.requiresApproval ? 'Approval required' : 'Instant join'}</Text>
             </View>
-            <View style={styles.amenityPill}>
-              <Text style={styles.amenityText}>{activity.currentSlots} spots left</Text>
+            <View style={[styles.amenityPill, { backgroundColor: colors.mutedSurface }]}>
+              <Text style={[styles.amenityText, { color: colors.textSecondary }]}>{activity.currentSlots} spots left</Text>
             </View>
             {isFull ? (
               <View style={styles.fullBadge}>
@@ -380,16 +382,16 @@ export default function ActivityDetailScreen() {
 
         {/* Description */}
         <Animated.View entering={FadeInDown.delay(350).springify()} style={styles.descSection}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <Text style={styles.description}>{activity.description}</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
+          <Text style={[styles.description, { color: colors.text }]}>{activity.description}</Text>
         </Animated.View>
 
         {/* Participants */}
         <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.participantsSection}>
-          <Text style={styles.sectionTitle}>Participants</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Participants</Text>
           <View style={styles.participantsRow}>
             <AvatarStack count={activity.participants.length} size={32} avatars={participantAvatars} />
-            <Text style={styles.participantCount}>
+            <Text style={[styles.participantCount, { color: colors.slate }]}>
               {joined}/{activity.maxSlots} spots filled
             </Text>
           </View>
@@ -398,19 +400,19 @@ export default function ActivityDetailScreen() {
 
         {/* Reactions */}
         <Animated.View entering={FadeInDown.delay(450).springify()} style={styles.reactionsSection}>
-          <Text style={styles.sectionTitle}>Reactions</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Reactions</Text>
           <View style={styles.reactionsRow}>
-          <TouchableOpacity style={styles.reactionBtn}>
-            <Ionicons name="flame-outline" size={15} color={Colors.accent} />
-            <Text style={styles.reactionCount}>{activity.reactions.fire}</Text>
+          <TouchableOpacity style={[styles.reactionBtn, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            <Ionicons name="flame-outline" size={15} color={colors.accent} />
+            <Text style={[styles.reactionCount, { color: colors.text }]}>{activity.reactions.fire}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.reactionBtn}>
-            <Ionicons name="heart-outline" size={15} color={Colors.error} />
-            <Text style={styles.reactionCount}>{activity.reactions.heart}</Text>
+          <TouchableOpacity style={[styles.reactionBtn, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            <Ionicons name="heart-outline" size={15} color={colors.error} />
+            <Text style={[styles.reactionCount, { color: colors.text }]}>{activity.reactions.heart}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.reactionBtn}>
-            <Ionicons name="thumbs-up-outline" size={15} color={Colors.success} />
-            <Text style={styles.reactionCount}>{activity.reactions.like}</Text>
+          <TouchableOpacity style={[styles.reactionBtn, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            <Ionicons name="thumbs-up-outline" size={15} color={colors.success} />
+            <Text style={[styles.reactionCount, { color: colors.text }]}>{activity.reactions.like}</Text>
           </TouchableOpacity>
           </View>
         </Animated.View>
@@ -419,7 +421,7 @@ export default function ActivityDetailScreen() {
       {/* Bottom action */}
       <Animated.View
         entering={FadeInUp.delay(500).springify()}
-        style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md }]}
+        style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md, backgroundColor: colors.surface, borderTopColor: colors.divider }]}
       >
         {isParticipant || isHost ? (
           <View style={styles.bottomActions}>
@@ -433,8 +435,8 @@ export default function ActivityDetailScreen() {
               style={styles.chatBtn}
             />
             {!isHost && (
-              <TouchableOpacity style={styles.leaveBtn} onPress={handleLeave}>
-                <Text style={styles.leaveBtnText}>Leave</Text>
+              <TouchableOpacity style={[styles.leaveBtn, { backgroundColor: colors.surface, borderColor: colors.divider }]} onPress={handleLeave}>
+                <Text style={[styles.leaveBtnText, { color: colors.text }]}>Leave</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -477,8 +479,8 @@ export default function ActivityDetailScreen() {
           <View style={styles.checkCircle}>
             <Ionicons name="checkmark" size={36} color={Colors.white} />
           </View>
-          <Text style={styles.confirmTitle}>Request Sent</Text>
-          <Text style={styles.confirmMessage}>
+          <Text style={[styles.confirmTitle, { color: colors.text }]}>Request Sent</Text>
+          <Text style={[styles.confirmMessage, { color: colors.slate }]}>
             {activity.requiresApproval
               ? `Your request to join ${activity.title} is pending. Chat unlocks when the host approves it.`
               : `You're in ${activity.title}. Chat unlocks once your spot is confirmed.`}

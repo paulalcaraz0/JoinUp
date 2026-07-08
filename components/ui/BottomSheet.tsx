@@ -16,6 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Colors, BorderRadius, Spacing } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -32,6 +33,7 @@ export function BottomSheet({
   snapPoints = [400],
   children,
 }: BottomSheetProps) {
+  const { colors } = useThemeColors();
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const context = useSharedValue({ y: 0 });
   const sheetHeight = snapPoints[0];
@@ -99,8 +101,14 @@ export function BottomSheet({
         />
       </Animated.View>
       <GestureDetector gesture={gesture}>
-        <Animated.View style={[styles.sheet, { height: sheetHeight }, animatedStyle]}>
-          <View style={styles.handle} />
+        <Animated.View
+          style={[
+            styles.sheet,
+            { height: sheetHeight, backgroundColor: colors.surface, borderColor: colors.divider },
+            animatedStyle,
+          ]}
+        >
+          <View style={[styles.handle, { backgroundColor: colors.divider }]} />
           {children}
         </Animated.View>
       </GestureDetector>
@@ -119,6 +127,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.divider,
     borderTopLeftRadius: BorderRadius.sheet,
     borderTopRightRadius: BorderRadius.sheet,
     paddingHorizontal: Spacing.lg,

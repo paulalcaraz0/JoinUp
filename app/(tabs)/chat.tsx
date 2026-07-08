@@ -17,6 +17,7 @@ import { useActivities } from '../../hooks/useActivities';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ChatRowSkeleton } from '../../components/ui/LoadingSkeleton';
 import { useAuthStore } from '../../store/authStore';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import { supabase } from '../../lib/supabase';
 import { clearChatActivityUnread, loadUnreadChatActivityIds, saveUnreadChatActivityIds } from '../../hooks/useChat';
 import type { Activity, JoinRequestStatus, Message } from '../../types';
@@ -81,6 +82,7 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
   hasUnread,
   recentMeta,
 }: ChatActivityRowProps) {
+  const { colors } = useThemeColors();
   const chipColor = CategoryColors[activity.category] ?? Colors.accent;
   const isHost = activity.hostId === currentUserId;
   const status = getJoinStatus(activity.id);
@@ -111,7 +113,7 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
-      <View style={[styles.chatItem, Shadows.card]}>
+      <View style={[styles.chatItem, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
         <TouchableOpacity
           style={styles.chatMainPress}
           onPress={handleOpen}
@@ -121,14 +123,14 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
             <Ionicons
               name={meta.locked ? 'lock-closed' : 'chatbubble'}
               size={20}
-              color={meta.locked ? Colors.slate : chipColor}
+              color={meta.locked ? colors.slate : chipColor}
             />
           </View>
           <View style={styles.chatInfo}>
-            <Text style={styles.chatTitle} numberOfLines={1}>
+            <Text style={[styles.chatTitle, { color: colors.text }]} numberOfLines={1}>
               {activity.title}
             </Text>
-            <Text style={styles.chatSubtitle} numberOfLines={1}>
+            <Text style={[styles.chatSubtitle, { color: colors.slate }]} numberOfLines={1}>
               {meta.locked ? meta.label : previewText}
             </Text>
             <View style={styles.statusRow}>
@@ -136,7 +138,7 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
                 <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
               </View>
               {hasUnread ? <View style={styles.unreadDot} /> : null}
-              {timeText ? <Text style={styles.timeText}>{timeText}</Text> : null}
+              {timeText ? <Text style={[styles.timeText, { color: colors.slate }]}>{timeText}</Text> : null}
             </View>
           </View>
         </TouchableOpacity>
@@ -159,7 +161,7 @@ const ChatActivityRow = React.memo(function ChatActivityRow({
           </TouchableOpacity>
         ) : (
           <View style={styles.chevronWrap}>
-            <Ionicons name="chevron-forward" size={18} color={Colors.slate} />
+            <Ionicons name="chevron-forward" size={18} color={colors.slate} />
           </View>
         )}
       </View>
@@ -201,6 +203,7 @@ export default function ChatListScreen() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
   const {
     activities,
     isLoading,
@@ -607,9 +610,9 @@ export default function ChatListScreen() {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
       <View style={styles.header}>
-        <Text style={styles.heading}>Chats</Text>
+        <Text style={[styles.heading, { color: colors.text }]}>Chats</Text>
       </View>
 
       {isLoading ? (

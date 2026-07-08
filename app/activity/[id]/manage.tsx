@@ -23,6 +23,7 @@ import { SlotProgressBar } from '../../../components/ui/SlotProgressBar';
 import { PrimaryButton } from '../../../components/ui/PrimaryButton';
 import { SecondaryButton } from '../../../components/ui/SecondaryButton';
 import { useActivities } from '../../../hooks/useActivities';
+import { useThemeColors } from '../../../hooks/useThemeColors';
 import { useAuthStore } from '../../../store/authStore';
 import { supabase } from '../../../lib/supabase';
 
@@ -85,14 +86,15 @@ const ParticipantRow = React.memo(function ParticipantRow({
   hostId,
   onRemove,
 }: ParticipantRowProps) {
+  const { colors } = useThemeColors();
   const handleRemove = useCallback(() => {
     onRemove(userId);
   }, [onRemove, userId]);
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).springify()}>
-      <View style={[styles.participantRow, Shadows.card]}>
-        <View style={styles.participantAvatar}>
+      <View style={[styles.participantRow, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+        <View style={[styles.participantAvatar, { backgroundColor: colors.primary }]}>
           {photoUrl ? (
             <Image source={{ uri: photoUrl }} style={styles.participantAvatarImage} resizeMode="cover" />
           ) : (
@@ -100,7 +102,7 @@ const ParticipantRow = React.memo(function ParticipantRow({
           )}
         </View>
         <View style={styles.participantInfo}>
-          <Text style={styles.participantName}>
+          <Text style={[styles.participantName, { color: colors.text }]}>
             {userId === hostId ? `${displayName || userId} (Host)` : displayName || userId}
           </Text>
         </View>
@@ -122,6 +124,7 @@ export default function ManageActivityScreen() {
   const id = rawId ? rawId.toString().trim() : '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
   const user = useAuthStore((s) => s.user);
   const {
     activities,
@@ -601,10 +604,10 @@ export default function ManageActivityScreen() {
 
   if (!activity) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
         <NavBar title="Manage" showBack />
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>Activity not found</Text>
+          <Text style={[styles.emptyText, { color: colors.slate }]}>Activity not found</Text>
         </View>
       </View>
     );
@@ -613,16 +616,16 @@ export default function ManageActivityScreen() {
   const joined = activity.maxSlots - activity.currentSlots;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.cream }]}>
       <NavBar title="Host Dashboard" showBack />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* Activity summary */}
-          <View style={[styles.summaryCard, Shadows.card]}>
-            <Text style={styles.activityTitle}>{activity.title}</Text>
+          <View style={[styles.summaryCard, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+            <Text style={[styles.activityTitle, { color: colors.text }]}>{activity.title}</Text>
             <View style={styles.slotInfo}>
-              <Text style={styles.slotText}>
+              <Text style={[styles.slotText, { color: colors.slate }]}>
                 {joined}/{activity.maxSlots} participants
               </Text>
               <SlotProgressBar current={joined} max={activity.maxSlots} showLabel={false} />
@@ -630,8 +633,8 @@ export default function ManageActivityScreen() {
           </View>
 
           {/* Image Gallery */}
-          <Text style={styles.sectionTitle}>Photos ({(activity.images ?? []).length})</Text>
-          <View style={[styles.imageGallery, Shadows.card]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Photos ({(activity.images ?? []).length})</Text>
+          <View style={[styles.imageGallery, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
             {(activity.images ?? []).length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScrollView}>
                 {activity.images!.map((imageUrl, index) => (
@@ -648,8 +651,8 @@ export default function ManageActivityScreen() {
               </ScrollView>
             ) : (
               <View style={styles.emptyGallery}>
-                <Ionicons name="images-outline" size={32} color={Colors.slate} />
-                <Text style={styles.emptyGalleryText}>No photos yet</Text>
+                <Ionicons name="images-outline" size={32} color={colors.slate} />
+                <Text style={[styles.emptyGalleryText, { color: colors.slate }]}>No photos yet</Text>
               </View>
             )}
             <TouchableOpacity
@@ -657,13 +660,13 @@ export default function ManageActivityScreen() {
               onPress={handleAddImage}
               disabled={isUploadingImage}
             >
-              <Ionicons name="add-circle-outline" size={20} color={Colors.accent} />
-              <Text style={styles.addImageText}>{isUploadingImage ? 'Uploading...' : 'Add Photo'}</Text>
+              <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
+              <Text style={[styles.addImageText, { color: colors.accent }]}>{isUploadingImage ? 'Uploading...' : 'Add Photo'}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Participants list */}
-          <Text style={styles.sectionTitle}>Participants ({activity.participants.length})</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Participants ({activity.participants.length})</Text>
 
           <FlatList
             data={activity.participants}
@@ -675,20 +678,20 @@ export default function ManageActivityScreen() {
 
           {activity.requiresApproval && (
             <>
-              <Text style={styles.sectionTitle}>Pending Requests</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Pending Requests</Text>
               {isLoadingRequests ? (
-                <View style={[styles.pendingCard, Shadows.card]}>
-                  <Text style={styles.emptyText}>Loading requests...</Text>
+                <View style={[styles.pendingCard, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+                  <Text style={[styles.emptyText, { color: colors.slate }]}>Loading requests...</Text>
                 </View>
               ) : pendingRequests.length === 0 ? (
-                <View style={[styles.pendingCard, Shadows.card]}>
-                  <Text style={styles.emptyText}>No pending join requests.</Text>
+                <View style={[styles.pendingCard, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
+                  <Text style={[styles.emptyText, { color: colors.slate }]}>No pending join requests.</Text>
                 </View>
               ) : (
                 pendingRequests.map((request) => (
-                  <View key={request.id} style={[styles.pendingCard, Shadows.card]}>
+                  <View key={request.id} style={[styles.pendingCard, Shadows.card, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
                     <View style={styles.pendingHeader}>
-                      <View style={styles.participantAvatar}>
+                      <View style={[styles.participantAvatar, { backgroundColor: colors.primary }]}>
                         {request.photoUrl ? (
                           <Image source={{ uri: request.photoUrl }} style={styles.pendingAvatarImage} />
                         ) : (
@@ -696,8 +699,8 @@ export default function ManageActivityScreen() {
                         )}
                       </View>
                       <View style={styles.participantInfo}>
-                        <Text style={styles.participantName}>{request.displayName}</Text>
-                        <Text style={styles.pendingMeta}>Requested to join</Text>
+                        <Text style={[styles.participantName, { color: colors.text }]}>{request.displayName}</Text>
+                        <Text style={[styles.pendingMeta, { color: colors.slate }]}>Requested to join</Text>
                       </View>
                     </View>
                     <View style={styles.pendingActions}>

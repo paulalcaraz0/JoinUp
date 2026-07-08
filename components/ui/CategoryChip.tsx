@@ -2,6 +2,7 @@ import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, withSpring, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Colors, Typography, BorderRadius, Spacing, CategoryColors } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface CategoryChipProps {
   label: string;
@@ -20,11 +21,12 @@ export function CategoryChip({
   style,
   size = 'md',
 }: CategoryChipProps) {
+  const { colors } = useThemeColors();
   const chipColor = CategoryColors[label] ?? Colors.accent;
 
   const animatedStyle = useAnimatedStyle(() => ({
-    backgroundColor: withTiming(selected ? chipColor : Colors.white, { duration: 200 }),
-    borderColor: withTiming(selected ? chipColor : Colors.divider, { duration: 200 }),
+    backgroundColor: withTiming(selected ? chipColor : colors.surfaceElevated, { duration: 200 }),
+    borderColor: withTiming(selected ? chipColor : colors.divider, { duration: 200 }),
     transform: [{ scale: withSpring(selected ? 1 : 1, { damping: 15 }) }],
   }));
 
@@ -41,7 +43,7 @@ export function CategoryChip({
       <Text
         style={[
           size === 'sm' ? styles.labelSm : styles.label,
-          { color: selected ? Colors.white : Colors.text },
+          { color: selected ? colors.white : colors.text },
         ]}
         numberOfLines={1}
         adjustsFontSizeToFit

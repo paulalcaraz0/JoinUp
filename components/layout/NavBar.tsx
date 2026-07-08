@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Colors, Typography, Spacing, Shadows } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface NavBarProps {
   title?: string;
@@ -20,15 +21,25 @@ export function NavBar({
   dark = false,
 }: NavBarProps) {
   const router = useRouter();
-  const textColor = dark ? Colors.white : Colors.text;
+  const { colors } = useThemeColors();
+  const textColor = dark ? Colors.white : colors.text;
 
   return (
-    <View style={[styles.container, style]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.divider,
+        },
+        style,
+      ]}
+    >
       <View style={styles.left}>
         {showBack && (
           <TouchableOpacity
             onPress={() => router.back()}
-            style={styles.backButton}
+            style={[styles.backButton, { backgroundColor: colors.cream }]}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="arrow-back" size={24} color={textColor} />

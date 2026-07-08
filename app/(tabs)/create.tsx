@@ -28,6 +28,7 @@ import { useAuthStore } from '../../store/authStore';
 import { supabase } from '../../lib/supabase';
 import { InputLimits, trimInput } from '../../lib/validation';
 import { useActivities } from '../../hooks/useActivities';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Activity } from '../../types';
 import { format } from 'date-fns';
 
@@ -110,6 +111,7 @@ export default function CreateActivityScreen() {
     maxParticipants?: string;
   }>();
   const insets = useSafeAreaInsets();
+  const { colors } = useThemeColors();
   const user = useAuthStore((s) => s.user);
   const { refetch } = useActivities();
   const lastAppliedDraftRef = useRef<string | null>(null);
@@ -550,23 +552,23 @@ export default function CreateActivityScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: colors.cream }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
-        style={[styles.container, { paddingTop: insets.top + Spacing.md }]}
+        style={[styles.container, { paddingTop: insets.top + Spacing.md, backgroundColor: colors.cream }]}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <Animated.View entering={FadeInDown.delay(100).springify()}>
-          <Text style={styles.heading}>Create Activity</Text>
-          <Text style={styles.subtitle}>Plan something awesome</Text>
+          <Text style={[styles.heading, { color: colors.text }]}>Create Activity</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Plan something awesome</Text>
         </Animated.View>
 
         {/* Images Gallery */}
         <Animated.View entering={FadeInDown.delay(150).springify()}>
-          <View style={styles.imagesSection}>
+          <View style={[styles.imagesSection, { backgroundColor: colors.surface, borderColor: colors.accent + '33' }]}>
             {selectedImages.length > 0 ? (
               <ScrollView
                 horizontal
@@ -587,8 +589,8 @@ export default function CreateActivityScreen() {
               </ScrollView>
             ) : null}
             <TouchableOpacity style={styles.addImageButton} onPress={handleImagePick}>
-              <Ionicons name="add-circle-outline" size={24} color={Colors.accent} />
-              <Text style={styles.addImageText}>
+              <Ionicons name="add-circle-outline" size={24} color={colors.accent} />
+              <Text style={[styles.addImageText, { color: colors.accent }]}>
                 {selectedImages.length > 0 ? 'Add More Photos' : 'Add Cover Photo'}
               </Text>
             </TouchableOpacity>
@@ -633,7 +635,7 @@ export default function CreateActivityScreen() {
 
         {/* Category */}
         <Animated.View entering={FadeInDown.delay(300).springify()}>
-          <Text style={styles.fieldLabel}>Category</Text>
+          <Text style={[styles.fieldLabel, { color: colors.text }]}>Category</Text>
           <View style={styles.chipsRow}>
             {CATEGORIES.map((cat) => (
               <CategoryChip
@@ -674,8 +676,8 @@ export default function CreateActivityScreen() {
             onPress={handleUseMyLocation}
             disabled={isFetchingLocation}
           >
-            <Ionicons name="navigate-outline" size={16} color={Colors.accent} />
-            <Text style={styles.useLocationText}>
+            <Ionicons name="navigate-outline" size={16} color={colors.accent} />
+            <Text style={[styles.useLocationText, { color: colors.accent }]}>
               {isFetchingLocation ? 'Getting location...' : 'Use my location'}
             </Text>
           </TouchableOpacity>
@@ -683,10 +685,10 @@ export default function CreateActivityScreen() {
 
         {/* Date and Time */}
         <Animated.View entering={FadeInDown.delay(400).springify()}>
-          <Text style={styles.fieldLabel}>Date & Time</Text>
-          <TouchableOpacity style={styles.dateBtn} onPress={openDateTimePicker}>
-            <Ionicons name="calendar-outline" size={18} color={Colors.accent} />
-            <Text style={styles.dateBtnText}>
+          <Text style={[styles.fieldLabel, { color: colors.text }]}>Date & Time</Text>
+          <TouchableOpacity style={[styles.dateBtn, { backgroundColor: colors.surface, borderColor: colors.divider }]} onPress={openDateTimePicker}>
+            <Ionicons name="calendar-outline" size={18} color={colors.accent} />
+            <Text style={[styles.dateBtnText, { color: colors.text }]}>
               {format(date, 'EEEE, MMMM d, yyyy, h:mm a')}
             </Text>
           </TouchableOpacity>
@@ -723,18 +725,18 @@ export default function CreateActivityScreen() {
 
         {/* Requires approval */}
         <Animated.View entering={FadeInDown.delay(500).springify()}>
-          <View style={styles.switchRow}>
+          <View style={[styles.switchRow, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
             <View style={styles.switchInfo}>
-              <Text style={styles.switchLabel}>Require Approval</Text>
-              <Text style={styles.switchDesc}>
+              <Text style={[styles.switchLabel, { color: colors.text }]}>Require Approval</Text>
+              <Text style={[styles.switchDesc, { color: colors.slate }]}>
                 Review and approve join requests
               </Text>
             </View>
             <Switch
               value={requiresApproval}
               onValueChange={setRequiresApproval}
-              trackColor={{ false: Colors.divider, true: Colors.accent + '50' }}
-              thumbColor={requiresApproval ? Colors.accent : Colors.white}
+              trackColor={{ false: colors.divider, true: colors.accent + '50' }}
+              thumbColor={requiresApproval ? colors.accent : Colors.white}
             />
           </View>
         </Animated.View>

@@ -7,6 +7,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Colors, Typography, BorderRadius, Spacing } from '../../constants/theme';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 interface SlotProgressBarProps {
   current: number;
@@ -15,6 +16,7 @@ interface SlotProgressBarProps {
 }
 
 export function SlotProgressBar({ current, max, showLabel = true }: SlotProgressBarProps) {
+  const { colors } = useThemeColors();
   const progress = useSharedValue(0);
   const percentage = max > 0 ? (current / max) * 100 : 0;
 
@@ -29,11 +31,11 @@ export function SlotProgressBar({ current, max, showLabel = true }: SlotProgress
     width: `${progress.value}%` as `${number}%`,
   }));
 
-  const barColor = percentage >= 100 ? Colors.danger : percentage >= 75 ? Colors.peach : Colors.accent;
+  const barColor = percentage >= 100 ? colors.danger : percentage >= 75 ? colors.peach : colors.accent;
 
   return (
     <View style={styles.container}>
-      <View style={styles.barBackground}>
+      <View style={[styles.barBackground, { backgroundColor: colors.mutedSurface }]}>
         <Animated.View
           style={[
             styles.barFill,
@@ -43,7 +45,7 @@ export function SlotProgressBar({ current, max, showLabel = true }: SlotProgress
         />
       </View>
       {showLabel && (
-        <Text style={styles.label}>
+        <Text style={[styles.label, { color: colors.slate }]}>
           {current}/{max} joined
         </Text>
       )}

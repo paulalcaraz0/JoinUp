@@ -24,6 +24,32 @@ export const Colors = {
   overlay: 'rgba(21,34,56,0.56)',
 } as const;
 
+export const DarkColors = {
+  primary: '#4F8CFF',
+  primarySoft: '#6AA2FF',
+  accent: '#4F8CFF',
+  accentSoft: 'rgba(79, 140, 255, 0.14)',
+  peach: '#F59E0B',
+  cream: '#0F1115',
+  white: '#FFFFFF',
+  surface: '#171A21',
+  surfaceElevated: '#1E232D',
+  mutedSurface: '#252B36',
+  inkMuted: '#2C3442',
+  slate: '#8B949E',
+  text: '#FFFFFF',
+  textSecondary: '#C9D1D9',
+  divider: '#2C3442',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  danger: '#EF4444',
+  overlay: 'rgba(0,0,0,0.68)',
+} as const;
+
+export type ThemeColors = typeof Colors;
+export type ThemeMode = 'light' | 'dark';
+
 export const Typography = {
   heading: 'Syne_700Bold',
   body: 'DMSans_400Regular',
