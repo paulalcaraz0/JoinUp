@@ -15,6 +15,7 @@ import {
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,7 +26,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { decode } from 'base64-arraybuffer';
 import { format } from 'date-fns';
-import { Colors, Typography, Spacing, BorderRadius } from '../../constants/theme';
+import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../constants/theme';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MessageSkeleton } from '../../components/ui/LoadingSkeleton';
 import { clearChatActivityUnread, useChat } from '../../hooks/useChat';
@@ -41,7 +42,12 @@ type ChatPerson = {
   photoUrl: string;
 };
 
+type DisplayMessage = Message & {
+  stackedImageUrls?: string[];
+};
+
 const CHAT_READ_MARKER_PREFIX = 'chatReadMarker:v1:';
+const IMAGE_STACK_GROUP_WINDOW_MS = 90 * 1000;
 
 function chatReadMarkerKey(userId: string, activityId: string) {
   return `${CHAT_READ_MARKER_PREFIX}${userId}:${activityId}`;
@@ -64,10 +70,11 @@ async function saveChatReadMarker(userId: string, activityId: string, value: str
 }
 
 type MessageRowProps = {
-  message: Message;
+  message: DisplayMessage;
   currentUserId?: string;
   hostId?: string;
   onDelete: (message: Message) => void;
+  onOpenImages: (imageUrls: string[], initialIndex?: number) => void;
 };
 
 type UnreadDividerProps = {
@@ -111,6 +118,48 @@ function formatMessageDateLabel(message: Message) {
   return format(date, 'MMM d, yyyy');
 }
 
+function shouldStackImageMessage(previous: Message | undefined, current: Message) {
+  if (!previous) return false;
+  if (previous.type !== 'image' || current.type !== 'image') return false;
+  if (!previous.imageUrl || !current.imageUrl) return false;
+  if (previous.senderId !== current.senderId) return false;
+
+  const previousTime = new Date(previous.createdAt).getTime();
+  const currentTime = new Date(current.createdAt).getTime();
+  if (Number.isNaN(previousTime) || Number.isNaN(currentTime)) return false;
+
+  return Math.abs(currentTime - previousTime) <= IMAGE_STACK_GROUP_WINDOW_MS;
+}
+
+function groupStackedImageMessages(messages: Message[]): DisplayMessage[] {
+  const grouped: DisplayMessage[] = [];
+
+  messages.forEach((message) => {
+    const lastGroup = grouped[grouped.length - 1];
+
+    if (shouldStackImageMessage(lastGroup, message)) {
+      const previousImageUrls = lastGroup.stackedImageUrls ?? (lastGroup.imageUrl ? [lastGroup.imageUrl] : []);
+      const currentImageUrl = message.imageUrl;
+      if (!currentImageUrl) return;
+
+      grouped[grouped.length - 1] = {
+        ...lastGroup,
+        createdAt: message.createdAt,
+        stackedImageUrls: [...previousImageUrls, currentImageUrl],
+      };
+      return;
+    }
+
+    grouped.push(
+      message.type === 'image' && message.imageUrl
+        ? { ...message, stackedImageUrls: [message.imageUrl] }
+        : message
+    );
+  });
+
+  return grouped;
+}
+
 const UnreadDivider = React.memo(function UnreadDivider({ label }: UnreadDividerProps) {
   return (
     <View style={styles.unreadDividerWrap}>
@@ -138,6 +187,7 @@ const MessageRow = React.memo(function MessageRow({
   currentUserId,
   hostId,
   onDelete,
+  onOpenImages,
 }: MessageRowProps) {
   const isMe = message.senderId === currentUserId;
   const isSystem = message.type === 'system';
@@ -189,7 +239,6 @@ const MessageRow = React.memo(function MessageRow({
       message.location
         ? `${message.location.lat.toFixed(4)}, ${message.location.lng.toFixed(4)}`
         : 'Shared location';
-
     const locationBubble = (
       <>
         {!isMe ? (
@@ -201,14 +250,21 @@ const MessageRow = React.memo(function MessageRow({
           activeOpacity={0.85}
           onPress={handleOpenMap}
           onLongPress={handleDelete}
-          style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+          style={[styles.locationCard, isMe ? styles.locationCardSent : styles.locationCardReceived]}
         >
-          <Ionicons name="location" size={18} color={isMe ? Colors.white : Colors.accent} />
-          <Text style={[styles.bubbleText, isMe && styles.bubbleTextSent]}>
-            Shared location
-          </Text>
-          <Text style={[styles.locationMetaText, isMe && styles.locationMetaTextSent]}>{locationLabel}</Text>
-          <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+          <View style={styles.locationLiveRow}>
+            <View style={styles.locationIconCircle}>
+              <Ionicons name="navigate" size={20} color={Colors.white} />
+            </View>
+            <View style={styles.locationLiveCopy}>
+              <Text style={styles.locationLiveTitle}>Shared location</Text>
+              <Text style={styles.locationLiveSubtitle}>{timeStr ? `Shared at ${timeStr}` : 'Tap to view on map'}</Text>
+            </View>
+          </View>
+          <Text style={styles.locationCoordinateText}>{locationLabel}</Text>
+          <View style={styles.locationViewButton}>
+            <Text style={styles.locationViewButtonText}>View location</Text>
+          </View>
         </TouchableOpacity>
       </>
     );
@@ -224,6 +280,14 @@ const MessageRow = React.memo(function MessageRow({
   }
 
   if (message.type === 'image' && message.imageUrl) {
+    const imageUrls = message.stackedImageUrls?.length ? message.stackedImageUrls : [message.imageUrl];
+    const stackPreviewUrls = imageUrls.slice(-3);
+    const extraPhotoCount = Math.max(0, imageUrls.length - 1);
+
+    const handleOpenImages = () => {
+      onOpenImages(imageUrls, imageUrls.length - 1);
+    };
+
     const handleRetryImage = () => {
       setImageLoadFailed(false);
       setImageRetryKey((value) => value + 1);
@@ -238,32 +302,57 @@ const MessageRow = React.memo(function MessageRow({
         ) : null}
         <TouchableOpacity
           activeOpacity={0.9}
+          onPress={imageLoadFailed ? undefined : handleOpenImages}
           onLongPress={handleDelete}
-          style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}
+          style={styles.imageBubble}
         >
-          <View style={styles.imageMessageFrame}>
+          <View style={styles.photoStackWrap}>
             {imageLoadFailed ? (
               <TouchableOpacity
                 style={styles.imageRetryWrap}
                 onPress={handleRetryImage}
                 activeOpacity={0.82}
               >
-                <Ionicons name="refresh-outline" size={22} color={isMe ? Colors.white : Colors.slate} />
-                <Text style={[styles.imageRetryText, isMe && styles.imageRetryTextSent]}>
+                <Ionicons name="refresh-outline" size={22} color={Colors.slate} />
+                <Text style={styles.imageRetryText}>
                   Tap to retry image
                 </Text>
               </TouchableOpacity>
             ) : (
-              <Image
-                key={`${message.id}-${imageRetryKey}`}
-                source={{ uri: message.imageUrl }}
-                style={styles.imageMessage}
-                resizeMode="cover"
-                onError={() => setImageLoadFailed(true)}
-              />
+              <>
+                {stackPreviewUrls.slice(0, -1).map((imageUrl, index) => {
+                  const isFirstLayer = index === 0;
+
+                  return (
+                    <View
+                      key={`${message.id}-stack-${index}-${imageUrl}`}
+                      style={[
+                        styles.photoStackLayer,
+                        isFirstLayer ? styles.photoStackLayerBack : styles.photoStackLayerMiddle,
+                      ]}
+                    >
+                      <Image source={{ uri: imageUrl }} style={styles.photoStackImage} resizeMode="cover" />
+                    </View>
+                  );
+                })}
+                <View style={[styles.photoStackLayer, styles.photoStackLayerFront]}>
+                  <Image
+                    key={`${message.id}-${imageRetryKey}`}
+                    source={{ uri: stackPreviewUrls[stackPreviewUrls.length - 1] ?? message.imageUrl }}
+                    style={styles.photoStackImage}
+                    resizeMode="cover"
+                    onError={() => setImageLoadFailed(true)}
+                  />
+                </View>
+                {extraPhotoCount > 0 ? (
+                  <View style={styles.photoCountBadge}>
+                    <Text style={styles.photoCountText}>{`+${extraPhotoCount} photo`}</Text>
+                  </View>
+                ) : null}
+              </>
             )}
           </View>
-          <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+          <Text style={styles.timeText}>{timeStr}</Text>
         </TouchableOpacity>
       </>
     );
@@ -286,14 +375,14 @@ const MessageRow = React.memo(function MessageRow({
             <Text style={styles.senderName}>{message.senderName}</Text>
           </View>
         ) : null}
-        <View style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived]}>
+        <View style={[styles.bubble, isMe ? styles.bubbleSent : styles.bubbleReceived, styles.imageBubble]}>
           <View style={styles.imageUnavailableWrap}>
-            <Ionicons name="image-outline" size={22} color={isMe ? Colors.white : Colors.slate} />
-            <Text style={[styles.imageUnavailableText, isMe && styles.imageUnavailableTextSent]}>
+            <Ionicons name="image-outline" size={22} color={Colors.slate} />
+            <Text style={styles.imageUnavailableText}>
               Image unavailable
             </Text>
           </View>
-          <Text style={[styles.timeText, isMe && styles.timeTextSent]}>{timeStr}</Text>
+          <Text style={styles.timeText}>{timeStr}</Text>
         </View>
       </>
     );
@@ -346,6 +435,7 @@ export default function GroupChatScreen() {
   const id = rawId ? rawId.toString().trim() : '';
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const user = useAuthStore((s) => s.user);
   const { activities, getJoinStatus, canAccessChat } = useActivities();
   const { messages, isLoading, error: chatError, sendMessage, sendImage, sendLocation, deleteMessage, pinnedMessage, refetch } = useChat(id);
@@ -355,10 +445,13 @@ export default function GroupChatScreen() {
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isInfoVisible, setIsInfoVisible] = useState(false);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [chatPeople, setChatPeople] = useState<ChatPerson[]>([]);
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
   const [lastReadAt, setLastReadAt] = useState<string | null>(null);
-  const flatListRef = useRef<FlatList<Message>>(null);
+  const flatListRef = useRef<FlatList<DisplayMessage>>(null);
+  const previewListRef = useRef<FlatList<string>>(null);
   const shouldAutoScrollRef = useRef(false);
   const hasScrolledToInitialBottomRef = useRef(false);
   const pendingInitialScrollRef = useRef(false);
@@ -375,6 +468,10 @@ export default function GroupChatScreen() {
     () => messages.filter((message) => !blockedUserIds.includes(message.senderId)),
     [blockedUserIds, messages]
   );
+  const displayMessages = useMemo(
+    () => groupStackedImageMessages(visibleMessages),
+    [visibleMessages]
+  );
   const latestVisibleMessageId = visibleMessages[visibleMessages.length - 1]?.id ?? '';
   const latestVisibleMessageAt = visibleMessages[visibleMessages.length - 1]?.createdAt ?? '';
   const latestOtherParticipant = useMemo(
@@ -390,8 +487,8 @@ export default function GroupChatScreen() {
     const boundary = new Date(lastReadAt).getTime();
     if (Number.isNaN(boundary)) return -1;
 
-    return visibleMessages.findIndex((message) => new Date(message.createdAt).getTime() > boundary);
-  }, [lastReadAt, visibleMessages]);
+    return displayMessages.findIndex((message) => new Date(message.createdAt).getTime() > boundary);
+  }, [displayMessages, lastReadAt]);
 
   useEffect(() => {
     latestVisibleMessageAtRef.current = latestVisibleMessageAt;
@@ -528,7 +625,7 @@ export default function GroupChatScreen() {
     if (!latestVisibleMessageId) return;
 
     if (!hasScrolledToInitialBottomRef.current && pendingInitialScrollRef.current) {
-      const targetIndex = unreadDividerIndex >= 0 ? unreadDividerIndex : visibleMessages.length - 1;
+      const targetIndex = unreadDividerIndex >= 0 ? unreadDividerIndex : displayMessages.length - 1;
       if (targetIndex >= 0) {
         scrollToIndexSafely(targetIndex, false);
       } else {
@@ -544,13 +641,13 @@ export default function GroupChatScreen() {
       scrollToBottom(true);
       shouldAutoScrollRef.current = false;
     }
-  }, [latestVisibleMessageId, scrollToBottom, scrollToIndexSafely, unreadDividerIndex, visibleMessages.length]);
+  }, [displayMessages.length, latestVisibleMessageId, scrollToBottom, scrollToIndexSafely, unreadDividerIndex]);
 
   useEffect(() => {
     if (!latestVisibleMessageId) return;
     if (hasScrolledToInitialBottomRef.current || !pendingInitialScrollRef.current) return;
 
-    const targetIndex = unreadDividerIndex >= 0 ? unreadDividerIndex : visibleMessages.length - 1;
+    const targetIndex = unreadDividerIndex >= 0 ? unreadDividerIndex : displayMessages.length - 1;
     if (targetIndex >= 0) {
       scrollToIndexSafely(targetIndex, false);
     } else {
@@ -560,7 +657,7 @@ export default function GroupChatScreen() {
     hasScrolledToInitialBottomRef.current = true;
     pendingInitialScrollRef.current = false;
     shouldAutoScrollRef.current = false;
-  }, [latestVisibleMessageId, scrollToBottom, scrollToIndexSafely, unreadDividerIndex, visibleMessages.length]);
+  }, [displayMessages.length, latestVisibleMessageId, scrollToBottom, scrollToIndexSafely, unreadDividerIndex]);
 
   const handleScrollToIndexFailed = useCallback((info: { index: number; highestMeasuredFrameIndex: number; averageItemLength: number }) => {
     const offset = Math.max(0, Math.floor(info.index * info.averageItemLength));
@@ -654,7 +751,8 @@ export default function GroupChatScreen() {
     }
 
     const extension = (uri.split('.').pop() ?? 'jpg').split('?')[0];
-    const objectPath = `${id}/${user?.uid ?? 'anon'}-${Date.now()}.${extension}`;
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const objectPath = `${id}/${user?.uid ?? 'anon'}-${uniqueSuffix}.${extension}`;
 
     const { error } = await (supabase as any).storage
       .from('chat-images')
@@ -681,16 +779,21 @@ export default function GroupChatScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        selectionLimit: 6,
         allowsEditing: false,
         quality: 0.85,
         base64: true,
       });
 
-      if (result.canceled || !result.assets?.[0]?.uri) return;
+      if (result.canceled || !result.assets?.length) return;
 
-      const imageObjectPath = await uploadChatImage(result.assets[0]);
       shouldAutoScrollRef.current = true;
-      await sendImage(imageObjectPath, user.uid, user.displayName);
+      for (const asset of result.assets) {
+        if (!asset.uri) continue;
+        const imageObjectPath = await uploadChatImage(asset);
+        await sendImage(imageObjectPath, user.uid, user.displayName);
+      }
     } catch (error: any) {
       shouldAutoScrollRef.current = false;
       Alert.alert('Upload failed', error?.message ?? 'Could not attach this photo. Please try again.');
@@ -818,9 +921,41 @@ export default function GroupChatScreen() {
     );
   }, [deleteMessage, user?.uid]);
 
+  const handleOpenImages = useCallback((imageUrls: string[], initialIndex = 0) => {
+    if (imageUrls.length === 0) return;
+    setPreviewImages(imageUrls);
+    setPreviewImageIndex(Math.min(Math.max(initialIndex, 0), imageUrls.length - 1));
+  }, []);
+
+  const handleCloseImagePreview = useCallback(() => {
+    setPreviewImages([]);
+    setPreviewImageIndex(0);
+  }, []);
+
+  const handlePreviewStep = useCallback((direction: -1 | 1) => {
+    const nextIndex = (() => {
+      if (previewImages.length === 0) return 0;
+      return (previewImageIndex + direction + previewImages.length) % previewImages.length;
+    })();
+
+    setPreviewImageIndex(nextIndex);
+    previewListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+  }, [previewImageIndex, previewImages.length]);
+
+  useEffect(() => {
+    if (previewImages.length === 0) return;
+
+    requestAnimationFrame(() => {
+      previewListRef.current?.scrollToIndex({
+        index: previewImageIndex,
+        animated: false,
+      });
+    });
+  }, [previewImages.length]);
+
   const renderMessage = useCallback(
-    ({ item, index }: { item: Message; index: number }) => {
-      const previousMessage = visibleMessages[index - 1];
+    ({ item, index }: { item: DisplayMessage; index: number }) => {
+      const previousMessage = displayMessages[index - 1];
       const shouldShowDateDivider =
         index === 0 || getMessageDayKey(item) !== getMessageDayKey(previousMessage);
 
@@ -833,11 +968,12 @@ export default function GroupChatScreen() {
             currentUserId={user?.uid}
             hostId={activity?.hostId}
             onDelete={handleDeleteMessage}
+            onOpenImages={handleOpenImages}
           />
         </View>
       );
     },
-    [activity?.hostId, handleDeleteMessage, unreadDividerIndex, user?.uid, visibleMessages]
+    [activity?.hostId, displayMessages, handleDeleteMessage, handleOpenImages, unreadDividerIndex, user?.uid]
   );
 
   if (activity && !isChatAllowed) {
@@ -883,14 +1019,6 @@ export default function GroupChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.text} />
         </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setIsInfoVisible(true)}
-          style={styles.infoBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Open activity information"
-        >
-          <Ionicons name="information" size={17} color={Colors.text} />
-        </TouchableOpacity>
         <View style={styles.headerInfo}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {activity?.title ?? 'Chat'}
@@ -899,14 +1027,24 @@ export default function GroupChatScreen() {
             {activity?.participants.length ?? 0} participants
           </Text>
         </View>
-        <TouchableOpacity
-          onPress={openSafetyMenu}
-          style={styles.safetyBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Open chat safety options"
-        >
-          <Ionicons name="shield-checkmark-outline" size={22} color={Colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => setIsInfoVisible(true)}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Open activity information"
+          >
+            <Ionicons name="information-circle-outline" size={22} color={Colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={openSafetyMenu}
+            style={styles.headerIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Open chat safety options"
+          >
+            <Ionicons name="shield-checkmark-outline" size={22} color={Colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Modal
@@ -985,6 +1123,75 @@ export default function GroupChatScreen() {
         </View>
       </Modal>
 
+      <Modal
+        visible={previewImages.length > 0}
+        animationType="fade"
+        transparent
+        onRequestClose={handleCloseImagePreview}
+      >
+        <View style={styles.imagePreviewBackdrop}>
+          <View style={[styles.imagePreviewHeader, { paddingTop: insets.top + Spacing.sm }]}>
+            <Text style={styles.imagePreviewCount}>
+              {previewImages.length > 1 ? `${previewImageIndex + 1} / ${previewImages.length}` : 'Photo'}
+            </Text>
+            <TouchableOpacity
+              onPress={handleCloseImagePreview}
+              style={styles.imagePreviewClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close photo preview"
+            >
+              <Ionicons name="close" size={24} color={Colors.white} />
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            ref={previewListRef}
+            data={previewImages}
+            keyExtractor={(item, index) => `${item}-${index}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <Image
+                source={{ uri: item }}
+                style={[styles.imagePreview, { width: windowWidth }]}
+                resizeMode="contain"
+              />
+            )}
+            getItemLayout={(_, index) => ({
+              length: windowWidth,
+              offset: windowWidth * index,
+              index,
+            })}
+            onMomentumScrollEnd={(event) => {
+              const nextIndex = Math.round(event.nativeEvent.contentOffset.x / windowWidth);
+              setPreviewImageIndex(Math.min(Math.max(nextIndex, 0), previewImages.length - 1));
+            }}
+          />
+
+          {previewImages.length > 1 ? (
+            <View pointerEvents="box-none" style={styles.imagePreviewControls}>
+              <TouchableOpacity
+                onPress={() => handlePreviewStep(-1)}
+                style={styles.imagePreviewNav}
+                accessibilityRole="button"
+                accessibilityLabel="Previous photo"
+              >
+                <Ionicons name="chevron-back" size={28} color={Colors.white} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => handlePreviewStep(1)}
+                style={styles.imagePreviewNav}
+                accessibilityRole="button"
+                accessibilityLabel="Next photo"
+              >
+                <Ionicons name="chevron-forward" size={28} color={Colors.white} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+
       {/* Pinned message banner */}
       {pinnedMessage && (
         <View style={styles.pinnedBanner}>
@@ -1028,7 +1235,7 @@ export default function GroupChatScreen() {
       ) : (
         <FlatList
           ref={flatListRef}
-          data={visibleMessages}
+          data={displayMessages}
           keyExtractor={(item) => item.id}
           renderItem={renderMessage}
           ListEmptyComponent={
@@ -1124,25 +1331,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  infoBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: Colors.divider,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.cream,
-  },
   headerInfo: {
     flex: 1,
     marginLeft: Spacing.sm,
+    minWidth: 0,
   },
-  safetyBtn: {
-    width: 44,
-    height: 44,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginLeft: Spacing.sm,
+  },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: Colors.cream,
+    borderWidth: 1,
+    borderColor: Colors.divider,
   },
   headerTitle: {
     fontFamily: Typography.bodyBold,
@@ -1292,6 +1500,63 @@ const styles = StyleSheet.create({
     fontFamily: Typography.bodyBold,
     fontSize: 11,
     color: Colors.accent,
+  },
+  imagePreviewBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.94)',
+  },
+  imagePreviewHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+  },
+  imagePreviewCount: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  imagePreviewClose: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.38)',
+  },
+  imagePreview: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  imagePreviewControls: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+  },
+  imagePreviewNav: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.38)',
+    ...Shadows.card,
   },
   pinnedBanner: {
     flexDirection: 'row',
@@ -1498,6 +1763,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.card,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.ms,
+    ...Shadows.soft,
   },
   bubbleSent: {
     backgroundColor: Colors.accent,
@@ -1509,6 +1775,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.divider,
   },
+  imageBubble: {
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: Spacing.xs,
+  },
   bubbleText: {
     fontFamily: Typography.body,
     fontSize: 15,
@@ -1516,6 +1788,67 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   bubbleTextSent: {
+    color: Colors.white,
+  },
+  locationCard: {
+    width: 240,
+    borderRadius: BorderRadius.card,
+    padding: Spacing.ms,
+    ...Shadows.soft,
+  },
+  locationCardSent: {
+    backgroundColor: Colors.primary,
+    borderBottomRightRadius: BorderRadius.sm,
+  },
+  locationCardReceived: {
+    backgroundColor: Colors.primary,
+    borderBottomLeftRadius: BorderRadius.sm,
+  },
+  locationLiveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  locationIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2488FF',
+  },
+  locationLiveCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  locationLiveTitle: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 14,
+    color: Colors.white,
+  },
+  locationLiveSubtitle: {
+    fontFamily: Typography.body,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.68)',
+    marginTop: 1,
+  },
+  locationCoordinateText: {
+    fontFamily: Typography.body,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
+    marginTop: Spacing.xs,
+  },
+  locationViewButton: {
+    minHeight: 38,
+    borderRadius: BorderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    marginTop: Spacing.sm,
+  },
+  locationViewButtonText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 13,
     color: Colors.white,
   },
   locationMetaText: {
@@ -1527,17 +1860,50 @@ const styles = StyleSheet.create({
   locationMetaTextSent: {
     color: Colors.white + 'D9',
   },
-  imageMessageFrame: {
-    width: 220,
+  photoStackWrap: {
+    width: 224,
     height: 220,
-    borderRadius: BorderRadius.md,
     marginBottom: 4,
-    overflow: 'hidden',
-    backgroundColor: Colors.divider + '66',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  imageMessage: {
+  photoStackLayer: {
+    position: 'absolute',
+    width: 190,
+    height: 184,
+    borderRadius: BorderRadius.card,
+    overflow: 'hidden',
+    backgroundColor: Colors.white,
+    ...Shadows.soft,
+  },
+  photoStackLayerBack: {
+    transform: [{ rotate: '-7deg' }, { translateX: -14 }, { translateY: 9 }],
+    opacity: 0.9,
+  },
+  photoStackLayerMiddle: {
+    transform: [{ rotate: '5deg' }, { translateX: 13 }, { translateY: 4 }],
+    opacity: 0.95,
+  },
+  photoStackLayerFront: {
+    transform: [{ rotate: '-1deg' }],
+  },
+  photoStackImage: {
     width: '100%',
     height: '100%',
+  },
+  photoCountBadge: {
+    position: 'absolute',
+    alignSelf: 'center',
+    borderRadius: BorderRadius.pill,
+    backgroundColor: 'rgba(21, 34, 56, 0.66)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  photoCountText: {
+    fontFamily: Typography.bodyBold,
+    fontSize: 12,
+    color: Colors.white,
+    letterSpacing: 0,
   },
   imageRetryWrap: {
     flex: 1,
