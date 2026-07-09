@@ -503,6 +503,7 @@ export default function ExploreScreen() {
           entering={FadeInDown.duration(180)}
           exiting={FadeOutUp.duration(160)}
           layout={LinearTransition.duration(180)}
+          style={styles.eventSearchBlock}
         >
           <View style={styles.eventSearchWrap}>
             <View style={styles.eventSearchRow}>
@@ -569,6 +570,7 @@ export default function ExploreScreen() {
           entering={FadeInDown.duration(180)}
           exiting={FadeOutUp.duration(160)}
           layout={LinearTransition.duration(180)}
+          style={styles.quickFilterBlock}
         >
           <ScrollView
             horizontal
@@ -821,7 +823,10 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
-    zIndex: 30,
+    zIndex: 50,
+  },
+  eventSearchBlock: {
+    zIndex: 50,
   },
   eventSearchRow: {
     flexDirection: 'row',
@@ -845,12 +850,16 @@ const styles = StyleSheet.create({
   },
   quickFilterScroll: {
     maxHeight: 44,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  quickFilterBlock: {
+    zIndex: 10,
   },
   quickFilterRow: {
     flexDirection: 'row',
     gap: Spacing.sm,
     paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xs,
     alignItems: 'center',
   },
   quickFilterCell: {
@@ -888,11 +897,11 @@ const styles = StyleSheet.create({
     borderColor: Colors.divider,
     minWidth: 210,
     overflow: 'hidden',
-    zIndex: 31,
+    zIndex: 60,
   },
   dropdownBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 25,
+    zIndex: 30,
   },
   placeItem: {
     paddingHorizontal: 12,
@@ -933,6 +942,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: Colors.text,
     marginHorizontal: Spacing.lg,
+    marginTop: Spacing.xs,
     marginBottom: Spacing.md,
   },
   sectionTitleNoMargin: {

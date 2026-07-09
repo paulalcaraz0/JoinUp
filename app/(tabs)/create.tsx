@@ -635,7 +635,7 @@ export default function CreateActivityScreen() {
 
         {/* Category */}
         <Animated.View entering={FadeInDown.delay(300).springify()}>
-          <Text style={[styles.fieldLabel, { color: colors.text }]}>Category</Text>
+          <Text style={[styles.fieldLabel, { color: isDark ? Colors.white : colors.text }]}>Category</Text>
           <View style={styles.chipsRow}>
             {CATEGORIES.map((cat) => (
               <CategoryChip
@@ -685,7 +685,7 @@ export default function CreateActivityScreen() {
 
         {/* Date and Time */}
         <Animated.View entering={FadeInDown.delay(400).springify()}>
-          <Text style={[styles.fieldLabel, { color: colors.text }]}>Date & Time</Text>
+          <Text style={[styles.fieldLabel, { color: isDark ? Colors.white : colors.text }]}>Date & Time</Text>
           <TouchableOpacity style={[styles.dateBtn, { backgroundColor: colors.surface, borderColor: colors.divider }]} onPress={openDateTimePicker}>
             <Ionicons name="calendar-outline" size={18} color={colors.accent} />
             <Text style={[styles.dateBtnText, { color: colors.text }]}>
@@ -729,7 +729,7 @@ export default function CreateActivityScreen() {
           <View style={[styles.switchRow, { backgroundColor: colors.surface, borderColor: colors.divider }]}>
             <View style={styles.switchInfo}>
               <Text style={[styles.switchLabel, { color: colors.text }]}>Require Approval</Text>
-              <Text style={[styles.switchDesc, { color: colors.slate }]}>
+              <Text style={[styles.switchDesc, { color: colors.textSecondary }]}>
                 Review and approve join requests
               </Text>
             </View>
