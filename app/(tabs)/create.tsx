@@ -111,7 +111,7 @@ export default function CreateActivityScreen() {
     maxParticipants?: string;
   }>();
   const insets = useSafeAreaInsets();
-  const { colors } = useThemeColors();
+  const { colors, isDark } = useThemeColors();
   const user = useAuthStore((s) => s.user);
   const { refetch } = useActivities();
   const lastAppliedDraftRef = useRef<string | null>(null);
@@ -699,6 +699,7 @@ export default function CreateActivityScreen() {
               mode={Platform.OS === 'ios' ? 'datetime' : pickerMode}
               minimumDate={new Date()}
               display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              themeVariant={isDark ? 'dark' : 'light'}
               onChange={handleDateChange}
             />
           ) : null}

@@ -23,6 +23,7 @@ export function InputField({
   error,
   containerStyle,
   rightAccessory,
+  style,
   ...props
 }: InputFieldProps) {
   const [isFocused, setIsFocused] = useState(false);
@@ -30,7 +31,7 @@ export function InputField({
 
   return (
     <View style={[styles.container, containerStyle]}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: colors.text }]}>{label}</Text>
       <View style={styles.inputRow}>
         <TextInput
           style={[
@@ -38,6 +39,7 @@ export function InputField({
             rightAccessory ? styles.inputWithAccessory : null,
             isFocused && styles.inputFocused,
             error ? styles.inputError : null,
+            style,
             {
               backgroundColor: isFocused ? colors.surfaceElevated : colors.surface,
               borderColor: error ? colors.danger : isFocused ? colors.accent : colors.divider,
@@ -63,7 +65,6 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: Typography.bodyBold,
     fontSize: 13,
-    color: Colors.text,
     marginBottom: 7,
   },
   inputRow: {
